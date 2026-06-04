@@ -60,6 +60,7 @@ This file captures project-specific guidance for humans and AI agents working on
   - single-node replica set MongoDB for change streams.
 - Docker-dependent tests may be visibly skipped when Docker is unavailable, but they must not silently pass.
 - Avoid test-only shortcuts that bypass the protocol, acknowledgement, client-result, or serializer paths.
+- Transport startup should not return until the tailable cursor or change stream is actively watching; otherwise early publishes can be missed.
 
 ## Documentation expectations
 

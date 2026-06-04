@@ -2,7 +2,7 @@
 
 `Kevsoft.AspNetCore.SignalR.MongoDB` is a MongoDB-backed scale-out provider for ASP.NET Core SignalR. It is being built to support two MongoDB transport modes: change streams for replica sets/sharded clusters, and tailable-await cursors over capped collections for standalone-friendly deployments.
 
-> Status: early implementation. The core lifetime manager and BSON protocol are in place, and the in-memory SignalR scale-out specification suite is passing. Real MongoDB transports and final DI extensions are under active development.
+> Status: early implementation. The core lifetime manager, BSON protocol, shared MongoDB transport foundation, tailable-await transport, and change-stream transport are in place. The in-memory SignalR scale-out specification suite and Docker-backed real MongoDB transport tests are passing. Final DI extensions are still under active development.
 
 ## Goals
 
@@ -94,4 +94,4 @@ Run the full fast test suite:
 dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration Release --nologo
 ```
 
-Real MongoDB transport tests are expected to run against Docker/Testcontainers. Tailable-await tests use a standalone MongoDB container; change-stream tests use a single-node replica set container.
+Real MongoDB transport tests run against Docker/Testcontainers. Tailable-await tests use a standalone MongoDB container; change-stream tests use a single-node replica set container. If Docker is unavailable, Docker-gated tests are visibly skipped.

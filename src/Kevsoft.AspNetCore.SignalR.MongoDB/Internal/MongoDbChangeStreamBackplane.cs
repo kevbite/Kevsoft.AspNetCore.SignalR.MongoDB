@@ -53,7 +53,7 @@ internal sealed class MongoDbChangeStreamBackplane : MongoDbBackplaneBase
         await Collection.Indexes.CreateManyAsync([ttlIndex, streamIndex], cancellationToken);
     }
 
-    protected override async Task RunReaderLoopAsync(CancellationToken cancellationToken)
+    protected override async Task RunReaderLoopAsync(TaskCompletionSource readerReady, CancellationToken cancellationToken)
     {
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -65,6 +65,7 @@ internal sealed class MongoDbChangeStreamBackplane : MongoDbBackplaneBase
                 };
 
                 using var cursor = await Collection.WatchAsync(options, cancellationToken);
+                readerReady.TrySetResult();
                 while (!cancellationToken.IsCancellationRequested && await cursor.MoveNextAsync(cancellationToken))
                 {
                     foreach (var change in cursor.Current)

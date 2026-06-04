@@ -72,8 +72,10 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
             }
 
             var linkedToken = _disposeTokenSource.Token;
-            _readTask = Task.Run(() => RunReaderLoopAsync(linkedToken), CancellationToken.None);
+            var readerReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _readTask = Task.Run(() => RunReaderLoopAsync(readerReady, linkedToken), CancellationToken.None);
             _presenceTask = Task.Run(() => RunPresenceHeartbeatAsync(linkedToken), CancellationToken.None);
+            await readerReady.Task.WaitAsync(cancellationToken);
             _started = true;
         }
         finally
@@ -166,7 +168,7 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
         }
     }
 
-    protected abstract Task RunReaderLoopAsync(CancellationToken cancellationToken);
+    protected abstract Task RunReaderLoopAsync(TaskCompletionSource readerReady, CancellationToken cancellationToken);
 
     protected abstract ValueTask InitializeMessageCollectionAsync(CancellationToken cancellationToken);
 

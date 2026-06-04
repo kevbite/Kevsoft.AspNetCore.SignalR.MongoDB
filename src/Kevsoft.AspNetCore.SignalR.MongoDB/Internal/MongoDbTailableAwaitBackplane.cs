@@ -42,7 +42,7 @@ internal sealed class MongoDbTailableAwaitBackplane : MongoDbBackplaneBase
         await EnsureSentinelDocumentAsync(cancellationToken);
     }
 
-    protected override async Task RunReaderLoopAsync(CancellationToken cancellationToken)
+    protected override async Task RunReaderLoopAsync(TaskCompletionSource readerReady, CancellationToken cancellationToken)
     {
         _lastTailablePosition = await ReadCurrentEndPositionAsync(cancellationToken);
 
@@ -58,6 +58,7 @@ internal sealed class MongoDbTailableAwaitBackplane : MongoDbBackplaneBase
                 };
 
                 using var cursor = await Collection.FindAsync(filter, options, cancellationToken);
+                readerReady.TrySetResult();
                 while (!cancellationToken.IsCancellationRequested && await cursor.MoveNextAsync(cancellationToken))
                 {
                     foreach (var document in cursor.Current)
