@@ -9,6 +9,7 @@ namespace Kevsoft.AspNetCore.SignalR.MongoDB.Tests;
 public class MongoDbRealTransportTests
 {
     [DockerFact]
+    [Trait("Category", "Integration")]
     public async Task TailableAwaitTransportRunsScaleoutBehaviorAgainstRealMongoDb()
     {
         await using var fixture = await MongoDbContainerFixture.StartAsync(replicaSet: false);
@@ -24,6 +25,7 @@ public class MongoDbRealTransportTests
     }
 
     [DockerFact]
+    [Trait("Category", "Integration")]
     public async Task ChangeStreamTransportRunsScaleoutBehaviorAgainstRealMongoDb()
     {
         await using var fixture = await MongoDbContainerFixture.StartAsync(replicaSet: true);

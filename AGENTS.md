@@ -59,8 +59,10 @@ This file captures project-specific guidance for humans and AI agents working on
   - standalone MongoDB for tailable-await.
   - single-node replica set MongoDB for change streams.
 - Docker-dependent tests may be visibly skipped when Docker is unavailable, but they must not silently pass.
+- Mark Docker/Testcontainers tests with `Category=Integration`. Use `--filter "Category!=Integration"` for the fast lane and the unfiltered test command for full MongoDB verification.
 - Avoid test-only shortcuts that bypass the protocol, acknowledgement, client-result, or serializer paths.
 - Transport startup should not return until the tailable cursor or change stream is actively watching; otherwise early publishes can be missed.
+- If a reader cannot open before initial readiness is signaled, fail startup and stop background tasks instead of retrying forever behind a hung host startup.
 - The public DI API spelling is `AddMongoDb(...)`. Keep README examples and tests aligned with that spelling.
 - `ChannelPrefix` is an application prefix; the manager composes it with the hub type to prevent cross-hub leakage.
 

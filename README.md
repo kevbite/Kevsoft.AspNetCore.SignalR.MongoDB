@@ -86,18 +86,33 @@ builder.Services
 
 ## Operational notes
 
-- Change streams require MongoDB to run as a replica set or sharded cluster.
-- Tailable-await requires a capped collection.
+- Change streams require MongoDB to run as a replica set or sharded cluster. They are the preferred mode for production clusters.
+- Tailable-await requires a capped collection. Size it for the largest outage or burst you need to tolerate: `average message bytes * messages per second * tolerated outage seconds`, plus headroom for indexes and message-size spikes.
 - Checkpoints are not a durable replay mechanism. They are only used to reduce gaps during in-process cursor interruptions.
-- MongoDB TTL cleanup is best-effort; documents can remain briefly after `MessageTtl`.
+- MongoDB TTL cleanup is best-effort; documents can remain briefly after `MessageTtl`. Keep `MessageTtl` long enough for expected reconnect windows, but short enough to avoid unbounded collection growth.
+- The change-stream transport creates TTL and stream/time indexes when index creation is enabled. Connection presence uses stream/connection and TTL indexes.
+- MongoDB writes use the driver/database defaults for write concern unless applications configure the supplied `MongoClientSettings`. Stronger write concern can improve durability at the cost of latency.
 - MongoDB inserts cannot report how many SignalR servers are subscribed. The implementation uses separate MongoDB presence records and heartbeats for remote connection checks.
+- Unlike Redis pub/sub, MongoDB messages are stored briefly in collections. This helps cursor recovery but means capped-collection sizing, TTL cleanup, and collection permissions are operational concerns.
 
 ## Development
 
-Run the full fast test suite:
+Run the fast suite without Docker-dependent integration tests:
+
+```bash
+dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration Release --nologo --filter "Category!=Integration"
+```
+
+Run the full suite, including real MongoDB transport tests:
 
 ```bash
 dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration Release --nologo
 ```
 
-Real MongoDB transport tests run against Docker/Testcontainers. Tailable-await tests use a standalone MongoDB container; change-stream tests use a single-node replica set container. If Docker is unavailable, Docker-gated tests are visibly skipped.
+Real MongoDB transport tests run against Docker/Testcontainers and are marked with `Category=Integration`. Tailable-await tests use a standalone MongoDB container; change-stream tests use a single-node replica set container. If Docker is unavailable, Docker-gated tests are visibly skipped.
+
+Create a release package locally:
+
+```bash
+dotnet pack src/Kevsoft.AspNetCore.SignalR.MongoDB/Kevsoft.AspNetCore.SignalR.MongoDB.csproj --configuration Release --nologo
+```

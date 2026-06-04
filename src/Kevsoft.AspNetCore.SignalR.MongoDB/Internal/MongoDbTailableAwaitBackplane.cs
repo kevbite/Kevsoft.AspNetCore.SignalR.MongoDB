@@ -81,6 +81,11 @@ internal sealed class MongoDbTailableAwaitBackplane : MongoDbBackplaneBase
             }
             catch (Exception ex)
             {
+                if (TryFailStartup(readerReady, ex))
+                {
+                    return;
+                }
+
                 Logger.LogWarning(ex, "MongoDB SignalR tailable-await cursor interrupted; reconnecting.");
                 await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
             }

@@ -1,11 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <PackageId>Kevsoft.AspNetCore.SignalR.MongoDB</PackageId>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Authors>Kevin Smith</Authors>
+    <Company>Kevsoft</Company>
     <Description>Provides scale-out support for ASP.NET Core SignalR using a MongoDB server and the MongoDB.Driver.</Description>
+    <PackageTags>aspnetcore;signalr;mongodb;backplane;scaleout</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/kevbite/Kevsoft.AspNetCore.SignalR.MongoDB</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/kevbite/Kevsoft.AspNetCore.SignalR.MongoDB</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,6 +29,10 @@
 
   <ItemGroup>
     <PackageReference Include="MongoDB.Driver" Version="3.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
 </Project>

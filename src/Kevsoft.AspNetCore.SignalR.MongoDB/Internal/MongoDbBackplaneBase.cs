@@ -76,7 +76,16 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
             var readerReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             _readTask = Task.Run(() => RunReaderLoopAsync(readerReady, linkedToken), CancellationToken.None);
             _presenceTask = Task.Run(() => RunPresenceHeartbeatAsync(linkedToken), CancellationToken.None);
-            await readerReady.Task.WaitAsync(cancellationToken);
+            try
+            {
+                await WaitForReaderStartupAsync(readerReady, _readTask, cancellationToken);
+            }
+            catch
+            {
+                await StopBackgroundTasksAfterFailedStartupAsync();
+                throw;
+            }
+
             _started = true;
         }
         finally
@@ -178,6 +187,19 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
 
     protected abstract ValueTask InitializeMessageCollectionAsync(CancellationToken cancellationToken);
 
+    protected static bool TryFailStartup(TaskCompletionSource readerReady, Exception exception)
+    {
+        if (readerReady.Task.IsCompleted)
+        {
+            return false;
+        }
+
+        readerReady.TrySetException(new InvalidOperationException(
+            "The MongoDB SignalR backplane reader failed before startup completed.",
+            exception));
+        return true;
+    }
+
     protected async ValueTask<bool> CollectionExistsAsync(string collectionName, CancellationToken cancellationToken)
     {
         using var cursor = await Database.ListCollectionNamesAsync(cancellationToken: cancellationToken);
@@ -268,6 +290,52 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
             {
                 Logger.LogWarning(ex, "Failed to refresh MongoDB SignalR connection presence.");
             }
+        }
+    }
+
+    private static async Task WaitForReaderStartupAsync(
+        TaskCompletionSource readerReady,
+        Task readTask,
+        CancellationToken cancellationToken)
+    {
+        var readyTask = readerReady.Task.WaitAsync(cancellationToken);
+        var completedTask = await Task.WhenAny(readyTask, readTask);
+        if (completedTask == readTask)
+        {
+            await readTask;
+            throw new InvalidOperationException("The MongoDB SignalR backplane reader stopped before startup completed.");
+        }
+
+        await readyTask;
+    }
+
+    private async Task StopBackgroundTasksAfterFailedStartupAsync()
+    {
+        _disposeTokenSource.Cancel();
+
+        try
+        {
+            if (_readTask != null)
+            {
+                await _readTask;
+            }
+
+            if (_presenceTask != null)
+            {
+                await _presenceTask;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Ignoring MongoDB SignalR background task failure after startup failed.");
+        }
+        finally
+        {
+            _readTask = null;
+            _presenceTask = null;
         }
     }
 

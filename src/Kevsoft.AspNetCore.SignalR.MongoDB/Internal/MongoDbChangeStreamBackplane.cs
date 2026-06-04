@@ -93,12 +93,22 @@ internal sealed class MongoDbChangeStreamBackplane : MongoDbBackplaneBase
             }
             catch (MongoCommandException ex) when (IsInvalidResumeToken(ex))
             {
+                if (TryFailStartup(readerReady, ex))
+                {
+                    return;
+                }
+
                 Logger.LogWarning(ex, "MongoDB SignalR change-stream resume token is no longer valid; restarting from live position.");
                 _resumeToken = null;
                 await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
             }
             catch (Exception ex)
             {
+                if (TryFailStartup(readerReady, ex))
+                {
+                    return;
+                }
+
                 Logger.LogWarning(ex, "MongoDB SignalR change stream interrupted; reconnecting.");
                 await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
             }
