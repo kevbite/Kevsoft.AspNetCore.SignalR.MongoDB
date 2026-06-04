@@ -12,10 +12,13 @@ internal sealed class MongoBackplaneChannels
         ArgumentException.ThrowIfNullOrWhiteSpace(serverName);
 
         _prefix = prefix;
+        StreamId = prefix;
         All = prefix + ":all";
         GroupManagement = prefix + ":internal:groups";
         ReturnResults = prefix + ":internal:return:" + serverName;
     }
+
+    public string StreamId { get; }
 
     public string All { get; }
 

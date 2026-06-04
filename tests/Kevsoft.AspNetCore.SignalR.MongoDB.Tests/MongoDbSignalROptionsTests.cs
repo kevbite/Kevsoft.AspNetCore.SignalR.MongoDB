@@ -20,6 +20,7 @@ public class MongoDbSignalROptionsTests
         Assert.Equal(TimeSpan.FromSeconds(1), options.TailableAwaitMaxAwaitTime);
         Assert.Equal(MongoDbSignalROptions.DefaultTailableCollectionSizeBytes, options.TailableCollectionSizeBytes);
         Assert.Equal(TimeSpan.FromDays(1), options.MessageTtl);
+        Assert.Equal(TimeSpan.FromMinutes(2), options.ConnectionPresenceTtl);
         Assert.Null(options.CheckpointStore);
         Assert.True(options.CreateCollectionIfMissing);
         Assert.True(options.CreateIndexes);

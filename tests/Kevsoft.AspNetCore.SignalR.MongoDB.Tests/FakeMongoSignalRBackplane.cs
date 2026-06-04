@@ -6,6 +6,7 @@ namespace Kevsoft.AspNetCore.SignalR.MongoDB.Tests;
 internal sealed class FakeMongoSignalRBackplane : IMongoSignalRBackplane
 {
     private readonly ConcurrentDictionary<string, List<Subscription>> _subscriptions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _connections = new(StringComparer.Ordinal);
 
     public bool Started { get; private set; }
 
@@ -13,8 +14,9 @@ internal sealed class FakeMongoSignalRBackplane : IMongoSignalRBackplane
 
     public List<MongoBackplaneEnvelope> Published { get; } = [];
 
-    public ValueTask StartAsync(CancellationToken cancellationToken = default)
+    public ValueTask StartAsync(string streamId, CancellationToken cancellationToken = default)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(streamId);
         cancellationToken.ThrowIfCancellationRequested();
         Started = true;
         return ValueTask.CompletedTask;
@@ -56,10 +58,31 @@ internal sealed class FakeMongoSignalRBackplane : IMongoSignalRBackplane
         return ValueTask.FromResult<IAsyncDisposable>(subscription);
     }
 
+    public ValueTask AddConnectionAsync(string connectionId, string serverId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _connections[connectionId] = serverId;
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask RemoveConnectionAsync(string connectionId, string serverId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _connections.TryRemove(new KeyValuePair<string, string>(connectionId, serverId));
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask<bool> HasConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(_connections.ContainsKey(connectionId));
+    }
+
     public ValueTask DisposeAsync()
     {
         Disposed = true;
         _subscriptions.Clear();
+        _connections.Clear();
         return ValueTask.CompletedTask;
     }
 

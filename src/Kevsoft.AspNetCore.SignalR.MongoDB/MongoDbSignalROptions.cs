@@ -73,6 +73,11 @@ public sealed class MongoDbSignalROptions
     public TimeSpan MessageTtl { get; set; } = TimeSpan.FromDays(1);
 
     /// <summary>
+    /// Gets or sets how long connection presence records are considered valid without a heartbeat.
+    /// </summary>
+    public TimeSpan ConnectionPresenceTtl { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>
     /// Gets or sets the checkpoint store used for transient in-process cursor recovery.
     /// </summary>
     /// <remarks>

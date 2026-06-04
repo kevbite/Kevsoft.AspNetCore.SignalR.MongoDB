@@ -29,7 +29,7 @@ This file captures project-specific guidance for humans and AI agents working on
 
 ## MongoDB transport rules
 
-- MongoDB inserts do not provide Redis-style subscriber counts. Real transports need a separate connection-presence mechanism for remote `InvokeConnectionAsync` existence checks.
+- MongoDB inserts do not provide Redis-style subscriber counts. Real transports use separate connection-presence records and heartbeats for remote `InvokeConnectionAsync` existence checks.
 - Cold start must begin from "now" and must not replay old backplane messages into current SignalR connections.
 - Checkpoints are for transient in-process recovery only. Do not seed an initial cold-start cursor from a durable checkpoint store.
 - Use a consistent top-level `streamId` to isolate hubs/apps sharing a collection.

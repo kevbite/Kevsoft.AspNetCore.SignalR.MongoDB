@@ -56,6 +56,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
 
         connection.Features.Set<IMongoDbFeature>(new MongoDbFeature());
         _connections.Add(connection);
+        await _backplane.AddConnectionAsync(connection.ConnectionId, _serverName, connection.ConnectionAborted);
 
         var connectionTask = SubscribeToConnection(connection);
         var userTask = string.IsNullOrEmpty(connection.UserIdentifier)
@@ -71,6 +72,8 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
         _connections.Remove(connection);
 
         var tasks = new List<Task>();
+        tasks.Add(_backplane.RemoveConnectionAsync(connection.ConnectionId, _serverName).AsTask());
+
         if (_connectionSubscriptions.TryRemove(connection.ConnectionId, out var subscription))
         {
             tasks.Add(subscription.DisposeAsync().AsTask());
@@ -278,6 +281,11 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
         {
             if (connection == null)
             {
+                if (!await _backplane.HasConnectionAsync(connectionId, cancellationToken))
+                {
+                    throw new IOException($"Connection '{connectionId}' does not exist.");
+                }
+
                 var received = await PublishAsync(
                     _protocol.WriteInvocation(
                         _channels.Connection(connectionId),
@@ -406,7 +414,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                 return;
             }
 
-            await _backplane.StartAsync(cancellationToken);
+            await _backplane.StartAsync(_channels.StreamId, cancellationToken);
             _coreSubscriptions.Add(await SubscribeToAll());
             _coreSubscriptions.Add(await SubscribeToGroupManagementChannel());
             _coreSubscriptions.Add(await SubscribeToAckChannel());

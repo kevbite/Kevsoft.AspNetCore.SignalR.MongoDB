@@ -72,6 +72,7 @@ The DI extension is planned as part of the consumer-experience work. Until that 
 | `TailableAwaitMaxAwaitTime` | Max idle server wait for tailable-await cursor operations. |
 | `TailableCollectionSizeBytes` | Capped collection size for the tailable-await transport. |
 | `MessageTtl` | Retention period for cleanup-capable transports. |
+| `ConnectionPresenceTtl` | How long remote connection presence records are considered valid without a heartbeat. |
 | `CheckpointStore` | Stores transient in-process cursor checkpoints. |
 | `CreateCollectionIfMissing` | Allows startup collection creation. |
 | `CreateIndexes` | Allows startup index creation. |
@@ -83,7 +84,7 @@ The DI extension is planned as part of the consumer-experience work. Until that 
 - Tailable-await requires a capped collection.
 - Checkpoints are not a durable replay mechanism. They are only used to reduce gaps during in-process cursor interruptions.
 - MongoDB TTL cleanup is best-effort; documents can remain briefly after `MessageTtl`.
-- MongoDB inserts cannot report how many SignalR servers are subscribed. The implementation uses separate presence tracking for remote connection checks.
+- MongoDB inserts cannot report how many SignalR servers are subscribed. The implementation uses separate MongoDB presence records and heartbeats for remote connection checks.
 
 ## Development
 
