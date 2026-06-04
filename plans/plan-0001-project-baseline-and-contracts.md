@@ -23,7 +23,7 @@ Establish the library shape, dependencies, public options, and core contracts be
 
 2. **MongoDB package baseline**
    - Add `MongoDB.Driver` to the library.
-   - Add `MessagePack` or another compact binary serializer for internal envelope encoding, following the Redis protocol pattern.
+   - Use MongoDB's native BSON support for internal envelope documents instead of adding a second binary serializer dependency.
    - Verify the current `Microsoft.AspNetCore.SignalR.Specification.Tests` NuGet package restores for `net10.0`. If not, temporarily reference/copy the specification source from `/home/kevin/dev/dotnet/aspnetcore/src/SignalR/server/Specification.Tests/src` into tests with attribution preserved.
 
 3. **Backplane semantics**

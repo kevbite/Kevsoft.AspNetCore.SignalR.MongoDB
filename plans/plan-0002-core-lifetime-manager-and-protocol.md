@@ -54,14 +54,14 @@ Create a MongoDB-neutral envelope protocol equivalent to Redis:
   - protocol name
   - serialized completion payload
 
-Prefer a compact binary payload stored in the MongoDB document, rather than storing protocol-specific JSON fields. This keeps behavior consistent across JSON and MessagePack hub protocols.
+Prefer a BSON-first document shape for envelope metadata, with serialized SignalR hub payloads stored as BSON binary values keyed by hub protocol name. This avoids adding a second binary envelope serializer while still preserving behavior across JSON and non-JSON hub protocols.
 
 ## Serializer
 
 Port/adapt the Redis approach:
 
 - `DefaultHubMessageSerializer` equivalent for supported hub protocols.
-- `MongoDbBackplaneProtocol` for envelope read/write.
+- `MongoDbBackplaneProtocol` for BSON envelope read/write.
 - Keep protocol parsing strict and fail fast on malformed envelopes.
 - Add tests for round-tripping each envelope type.
 

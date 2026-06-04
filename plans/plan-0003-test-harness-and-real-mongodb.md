@@ -57,7 +57,7 @@ Use a helper factory that creates `MongoDbHubLifetimeManager<Hub>` with:
 
 - null/test logger
 - default options
-- default hub protocol resolver including JSON and MessagePack where available
+- default hub protocol resolver including JSON and another non-JSON hub protocol where available
 - in-memory backplane injected through options/factory/service registration
 
 This suite should run without Docker and should be the earliest feedback loop for core manager correctness.

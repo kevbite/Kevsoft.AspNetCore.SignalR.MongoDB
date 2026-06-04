@@ -33,7 +33,7 @@ Add ASP.NET Core end-to-end tests similar to Redis:
 
 - two app servers using the same MongoDB backplane.
 - WebSockets and fallback transports where feasible.
-- JSON and MessagePack hub protocols.
+- JSON and non-JSON hub protocols, including a binary SignalR hub protocol if that test dependency is added.
 - broadcast, group, user, specific connection, multiple groups/users.
 - group names and user ids with special characters treated literally.
 - client result invocation across servers.
