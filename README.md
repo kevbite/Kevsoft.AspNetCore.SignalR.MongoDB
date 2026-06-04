@@ -2,27 +2,6 @@
 
 `Kevsoft.AspNetCore.SignalR.MongoDB` is a MongoDB-backed scale-out provider for ASP.NET Core SignalR. It is being built to support two MongoDB transport modes: change streams for replica sets/sharded clusters, and tailable-await cursors over capped collections for standalone-friendly deployments.
 
-> Status: early implementation. The core lifetime manager, BSON protocol, shared MongoDB transport foundation, tailable-await transport, change-stream transport, and DI extensions are in place. The in-memory SignalR scale-out specification suite and Docker-backed real MongoDB transport tests are passing.
-
-## Goals
-
-- Provide a simple SignalR backplane for applications already using MongoDB.
-- Support both `ChangeStreams` and `TailableAwait` transports.
-- Store transient in-process checkpoints:
-  - change-stream resume tokens.
-  - tailable cursor positions.
-- Keep the core package BSON-first while preserving extension points for optional serializers in separate packages.
-- Validate behavior with Microsoft’s SignalR specification tests and real MongoDB integration tests.
-
-## Transport modes
-
-| Mode | Best for | MongoDB requirement | Notes |
-| --- | --- | --- | --- |
-| `ChangeStreams` | Modern production MongoDB clusters | Replica set or sharded cluster | Preferred transport when available. Uses resume tokens for in-process reconnects and TTL cleanup for message documents. |
-| `TailableAwait` | Standalone MongoDB or capped-collection deployments | Capped collection | Uses a tailable-await cursor. Collection overflow can drop old messages during bursts. |
-
-Both modes treat SignalR backplane messages as ephemeral. Cold starts begin from live messages and do not replay historical documents into current hub connections.
-
 ## Setup
 
 Register MongoDB scale-out from the SignalR server builder:
@@ -64,6 +43,16 @@ builder.Services
     });
 ```
 
+## Transport modes
+
+| Mode | Best for | MongoDB requirement | Notes |
+| --- | --- | --- | --- |
+| `ChangeStreams` | Modern production MongoDB clusters | Replica set or sharded cluster | Preferred transport when available. Uses resume tokens for in-process reconnects and TTL cleanup for message documents. |
+| `TailableAwait` | Standalone MongoDB or capped-collection deployments | Capped collection | Uses a tailable-await cursor. Collection overflow can drop old messages during bursts. |
+
+Both modes treat SignalR backplane messages as ephemeral. Cold starts begin from live messages and do not replay historical documents into current hub connections.
+
+
 ## Key options
 
 | Option | Purpose |
@@ -95,24 +84,10 @@ builder.Services
 - MongoDB inserts cannot report how many SignalR servers are subscribed. The implementation uses separate MongoDB presence records and heartbeats for remote connection checks.
 - Unlike Redis pub/sub, MongoDB messages are stored briefly in collections. This helps cursor recovery but means capped-collection sizing, TTL cleanup, and collection permissions are operational concerns.
 
-## Development
+## Contributing
 
-Run the fast suite without Docker-dependent integration tests:
+1. Issue
+1. Fork
+1. Hack!
+1. Pull Request
 
-```bash
-dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration Release --nologo --filter "Category!=Integration"
-```
-
-Run the full suite, including real MongoDB transport tests:
-
-```bash
-dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration Release --nologo
-```
-
-Real MongoDB transport tests run against Docker/Testcontainers and are marked with `Category=Integration`. Tailable-await tests use a standalone MongoDB container; change-stream tests use a single-node replica set container. If Docker is unavailable, Docker-gated tests are visibly skipped.
-
-Create a release package locally:
-
-```bash
-dotnet pack src/Kevsoft.AspNetCore.SignalR.MongoDB/Kevsoft.AspNetCore.SignalR.MongoDB.csproj --configuration Release --nologo
-```
