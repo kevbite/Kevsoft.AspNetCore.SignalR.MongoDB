@@ -8,7 +8,7 @@ This file captures project-specific guidance for humans and AI agents working on
 - Keep the core package BSON-first. Do not add MessagePack to the core package; preserve serializer extension points so a separate optional MessagePack package can be added later.
 - Target modern .NET practices and keep the library compatible with the configured target frameworks in the project file.
 - Follow the ASP.NET Core Redis scale-out provider patterns where they fit, but do not copy Redis semantics that MongoDB cannot provide.
-- Prefer small, descriptive commits authored as `Kevin Smith <kev_bite@msn.com>` with no `Co-authored-by` trailer.
+- Prefer small, descriptive commits
 
 ## Design principles
 
@@ -54,6 +54,7 @@ This file captures project-specific guidance for humans and AI agents working on
 ## Testing expectations
 
 - Run `dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration Release --nologo` after code changes.
+- `global.json` pins the .NET 10 SDK feature band for deterministic local and CI builds. Update GitHub Actions SDK setup alongside it.
 - Keep the Microsoft `ScaleoutHubLifetimeManagerTests<TBackplane>` suite passing against the in-memory backplane.
 - MongoDB transports must have real MongoDB tests, preferably via Docker/Testcontainers:
   - standalone MongoDB for tailable-await.
@@ -65,6 +66,13 @@ This file captures project-specific guidance for humans and AI agents working on
 - If a reader cannot open before initial readiness is signaled, fail startup and stop background tasks instead of retrying forever behind a hung host startup.
 - The public DI API spelling is `AddMongoDb(...)`. Keep README examples and tests aligned with that spelling.
 - `ChannelPrefix` is an application prefix; the manager composes it with the hub type to prevent cross-hub leakage.
+
+## Release expectations
+
+- CI packages must pass fast tests, Docker-backed integration tests, package metadata validation, and local package-consumption validation.
+- Release packages publish only from `v*.*.*` tags through the `nuget-production` GitHub Environment.
+- Pass `/p:Version` and `/p:PackageVersion` explicitly in CI/release workflows so tag-driven package versions do not fall back to the project `VersionPrefix`.
+- Keep `NUGET_API_KEY` scoped to the package and environment; do not expose publishing secrets to pull-request workflows.
 
 ## Documentation expectations
 
