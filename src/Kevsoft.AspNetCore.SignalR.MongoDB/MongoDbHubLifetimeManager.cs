@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Protocol;
 using Kevsoft.AspNetCore.SignalR.MongoDB.Internal;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -35,6 +36,26 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
     private bool _backplaneStarted;
     private int _internalAckId;
 
+    /// <summary>
+    /// Constructs the <see cref="MongoDbHubLifetimeManager{THub}"/> with services from dependency injection.
+    /// </summary>
+    /// <param name="logger">The logger.</param>
+    /// <param name="options">The MongoDB SignalR options.</param>
+    /// <param name="hubProtocolResolver">The SignalR hub protocol resolver.</param>
+    /// <param name="serviceProvider">The service provider used to resolve internal transport services.</param>
+    public MongoDbHubLifetimeManager(
+        ILogger<MongoDbHubLifetimeManager<THub>> logger,
+        IOptions<MongoDbSignalROptions> options,
+        IHubProtocolResolver hubProtocolResolver,
+        IServiceProvider serviceProvider)
+        : this(
+            logger,
+            options,
+            hubProtocolResolver,
+            serviceProvider.GetRequiredService<IMongoSignalRBackplane>())
+    {
+    }
+
     internal MongoDbHubLifetimeManager(
         ILogger<MongoDbHubLifetimeManager<THub>> logger,
         IOptions<MongoDbSignalROptions> options,
@@ -46,7 +67,10 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
         _hubProtocolResolver = hubProtocolResolver;
         _backplane = backplane;
         _ackHandler = new AckHandler(_options.AckTimeout);
-        _channels = new MongoBackplaneChannels(_options.ChannelPrefix ?? typeof(THub).FullName!, _serverName);
+        var channelPrefix = string.IsNullOrEmpty(_options.ChannelPrefix)
+            ? typeof(THub).FullName!
+            : _options.ChannelPrefix + ":" + typeof(THub).FullName;
+        _channels = new MongoBackplaneChannels(channelPrefix, _serverName);
     }
 
     /// <inheritdoc />

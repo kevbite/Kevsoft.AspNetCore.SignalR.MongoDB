@@ -16,6 +16,7 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
     private Task? _readTask;
     private Task? _presenceTask;
     private bool _started;
+    private int _disposed;
 
     protected MongoDbBackplaneBase(
         IMongoDatabase database,
@@ -142,6 +143,11 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
         _disposeTokenSource.Cancel();
 
         try

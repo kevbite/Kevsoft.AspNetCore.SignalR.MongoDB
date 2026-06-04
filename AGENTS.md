@@ -61,6 +61,8 @@ This file captures project-specific guidance for humans and AI agents working on
 - Docker-dependent tests may be visibly skipped when Docker is unavailable, but they must not silently pass.
 - Avoid test-only shortcuts that bypass the protocol, acknowledgement, client-result, or serializer paths.
 - Transport startup should not return until the tailable cursor or change stream is actively watching; otherwise early publishes can be missed.
+- The public DI API spelling is `AddMongoDb(...)`. Keep README examples and tests aligned with that spelling.
+- `ChannelPrefix` is an application prefix; the manager composes it with the hub type to prevent cross-hub leakage.
 
 ## Documentation expectations
 

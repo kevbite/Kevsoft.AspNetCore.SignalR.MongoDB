@@ -2,7 +2,7 @@
 
 `Kevsoft.AspNetCore.SignalR.MongoDB` is a MongoDB-backed scale-out provider for ASP.NET Core SignalR. It is being built to support two MongoDB transport modes: change streams for replica sets/sharded clusters, and tailable-await cursors over capped collections for standalone-friendly deployments.
 
-> Status: early implementation. The core lifetime manager, BSON protocol, shared MongoDB transport foundation, tailable-await transport, and change-stream transport are in place. The in-memory SignalR scale-out specification suite and Docker-backed real MongoDB transport tests are passing. Final DI extensions are still under active development.
+> Status: early implementation. The core lifetime manager, BSON protocol, shared MongoDB transport foundation, tailable-await transport, change-stream transport, and DI extensions are in place. The in-memory SignalR scale-out specification suite and Docker-backed real MongoDB transport tests are passing.
 
 ## Goals
 
@@ -23,14 +23,14 @@
 
 Both modes treat SignalR backplane messages as ephemeral. Cold starts begin from live messages and do not replay historical documents into current hub connections.
 
-## Intended setup
+## Setup
 
-The final consumer experience will be an ASP.NET Core DI extension that registers the MongoDB lifetime manager and selected transport. The intended shape is:
+Register MongoDB scale-out from the SignalR server builder:
 
 ```csharp
 builder.Services
     .AddSignalR()
-    .AddMongoDB(options =>
+    .AddMongoDb(options =>
     {
         options.ConnectionString = builder.Configuration.GetConnectionString("MongoDB");
         options.DatabaseName = "my_app";
@@ -40,12 +40,20 @@ builder.Services
     });
 ```
 
+If the connection string includes the database name, the connection string overload can infer `DatabaseName`:
+
+```csharp
+builder.Services
+    .AddSignalR()
+    .AddMongoDb("mongodb://localhost:27017/my_app");
+```
+
 For tailable-await:
 
 ```csharp
 builder.Services
     .AddSignalR()
-    .AddMongoDB(options =>
+    .AddMongoDb(options =>
     {
         options.ConnectionString = builder.Configuration.GetConnectionString("MongoDB");
         options.DatabaseName = "my_app";
@@ -56,8 +64,6 @@ builder.Services
     });
 ```
 
-The DI extension is planned as part of the consumer-experience work. Until that lands, the package is not ready for production consumption.
-
 ## Key options
 
 | Option | Purpose |
@@ -67,7 +73,7 @@ The DI extension is planned as part of the consumer-experience work. Until that 
 | `CollectionName` | Collection used for SignalR backplane message documents. |
 | `TransportMode` | Selects `ChangeStreams` or `TailableAwait`. |
 | `MongoClientFactory` | Allows applications to provide an existing `IMongoClient`. |
-| `ChannelPrefix` | Isolates applications or hubs sharing the same MongoDB collection. |
+| `ChannelPrefix` | Isolates applications sharing the same MongoDB collection. It is combined with the hub type so multiple hubs stay isolated. |
 | `AckTimeout` | Timeout for remote group-management acknowledgements. |
 | `TailableAwaitMaxAwaitTime` | Max idle server wait for tailable-await cursor operations. |
 | `TailableCollectionSizeBytes` | Capped collection size for the tailable-await transport. |
