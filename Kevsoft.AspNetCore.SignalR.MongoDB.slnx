@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Kevsoft.AspNetCore.SignalR.MongoDB/Kevsoft.AspNetCore.SignalR.MongoDB.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Kevsoft.AspNetCore.SignalR.MongoDB.Tests/Kevsoft.AspNetCore.SignalR.MongoDB.Tests.csproj" />
+  </Folder>
+</Solution>

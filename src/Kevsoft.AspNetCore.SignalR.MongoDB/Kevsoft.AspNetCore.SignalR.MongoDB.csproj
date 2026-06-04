@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Provides scale-out support for ASP.NET Core SignalR using a MongoDB server and the MongoDB.Driver.</Description>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MessagePack" Version="3.1.6" />
+    <PackageReference Include="MongoDB.Driver" Version="3.9.0" />
+  </ItemGroup>
+
+</Project>
