@@ -20,7 +20,8 @@ internal sealed class ClientResultsManager : IInvocationBinder, IDisposable
                 var tuple = ((ClientResultsManager Manager, string InvocationId))state!;
                 if (tuple.Manager._invocations.TryRemove(tuple.InvocationId, out var invocation))
                 {
-                    invocation.TrySetCanceled();
+                    invocation.TrySetException(new HubException("Invocation canceled by the server."));
+                    invocation.Dispose();
                 }
             }, (this, invocationId));
         }
@@ -61,10 +62,15 @@ internal sealed class ClientResultsManager : IInvocationBinder, IDisposable
     public async Task<bool> TryCompleteResultAsync(string connectionId, CompletionMessage completionMessage)
     {
         if (string.IsNullOrEmpty(completionMessage.InvocationId) ||
-            !_invocations.TryGetValue(completionMessage.InvocationId, out var invocation) ||
-            !string.Equals(invocation.ConnectionId, connectionId, StringComparison.Ordinal))
+            !_invocations.TryGetValue(completionMessage.InvocationId, out var invocation))
         {
             return false;
+        }
+
+        if (!string.Equals(invocation.ConnectionId, connectionId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Connection ID '{connectionId}' is not valid for invocation ID '{completionMessage.InvocationId}'.");
         }
 
         if (invocation.ForwardCompletion != null)
@@ -210,6 +216,11 @@ internal sealed class ClientResultsManager : IInvocationBinder, IDisposable
         public void TrySetCanceled()
         {
             _taskCompletionSource?.TrySetCanceled();
+        }
+
+        public void TrySetException(Exception exception)
+        {
+            _taskCompletionSource?.TrySetException(exception);
         }
 
         public void Dispose()

@@ -278,7 +278,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
         {
             if (connection == null)
             {
-                await PublishAsync(
+                var received = await PublishAsync(
                     _protocol.WriteInvocation(
                         _channels.Connection(connectionId),
                         methodName,
@@ -287,6 +287,11 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                         returnChannel: _channels.ReturnResults,
                         serverId: _serverName),
                     cancellationToken);
+
+                if (received < 1)
+                {
+                    throw new IOException($"Connection '{connectionId}' does not exist.");
+                }
             }
             else
             {
@@ -326,10 +331,10 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
         return _clientResultsManager.TryGetType(invocationId, out type);
     }
 
-    private async Task PublishAsync(MongoBackplaneEnvelope envelope, CancellationToken cancellationToken)
+    private async Task<long> PublishAsync(MongoBackplaneEnvelope envelope, CancellationToken cancellationToken)
     {
         await EnsureBackplaneStarted(cancellationToken);
-        await _backplane.PublishAsync(envelope, cancellationToken);
+        return await _backplane.PublishAsync(envelope, cancellationToken);
     }
 
     private Task AddGroupAsyncCore(HubConnectionContext connection, string groupName)

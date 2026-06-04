@@ -96,14 +96,6 @@ Add targeted tests not fully covered by the specification suite:
 - Malformed envelopes are logged and do not stop future message processing.
 - Disposing a manager unsubscribes and cancels pending operations.
 
-## Dependency risk
-
-If the NuGet package `Microsoft.AspNetCore.SignalR.Specification.Tests` is not available for the desired .NET 10 version:
-
-1. Prefer an official package feed/version that matches the ASP.NET Core packages used by the library.
-2. If unavailable, reference the source from `/home/kevin/dev/dotnet/aspnetcore/src/SignalR/server/Specification.Tests/src` in the test project.
-3. Keep the source isolated under test-only code and preserve license headers.
-
 ## Acceptance criteria
 
 - The full scale-out specification suite passes against the in-memory backplane.
