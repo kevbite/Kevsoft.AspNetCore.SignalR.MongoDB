@@ -1,8 +1,10 @@
+using MongoDB.Bson;
+
 namespace Kevsoft.AspNetCore.SignalR.MongoDB.Internal;
 
 internal interface IBackplaneEnvelopeSerializer
 {
-    byte[] Serialize(MongoBackplaneEnvelope envelope);
+    BsonDocument Serialize(MongoBackplaneEnvelope envelope);
 
-    MongoBackplaneEnvelope Deserialize(ReadOnlyMemory<byte> payload);
+    MongoBackplaneEnvelope Deserialize(BsonDocument document);
 }
