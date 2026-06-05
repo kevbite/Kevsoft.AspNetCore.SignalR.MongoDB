@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Kevsoft.AspNetCore.SignalR.MongoDB.Tests;
+namespace Kevsoft.AspNetCore.SignalR.MongoDB.IntegrationTests;
 
 public sealed class DockerFactAttribute : FactAttribute
 {
@@ -12,7 +12,7 @@ public sealed class DockerFactAttribute : FactAttribute
         }
     }
 
-    private static bool IsDockerAvailable()
+    internal static bool IsDockerAvailable()
     {
         try
         {

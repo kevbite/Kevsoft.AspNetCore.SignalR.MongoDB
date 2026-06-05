@@ -1,7 +1,7 @@
 using MongoDB.Driver;
 using Testcontainers.MongoDb;
 
-namespace Kevsoft.AspNetCore.SignalR.MongoDB.Tests;
+namespace Kevsoft.AspNetCore.SignalR.MongoDB.IntegrationTests;
 
 internal sealed class MongoDbContainerFixture : IAsyncDisposable
 {

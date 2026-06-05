@@ -1,12 +1,13 @@
 using System.Buffers;
 using System.IO.Pipelines;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Connections;
 using Microsoft.AspNetCore.Connections.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Protocol;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Kevsoft.AspNetCore.SignalR.MongoDB.Tests;
+namespace Kevsoft.AspNetCore.SignalR.MongoDB.IntegrationTests;
 
 internal sealed class MongoTestClient : ITransferFormatFeature, IDisposable
 {
@@ -31,9 +32,16 @@ internal sealed class MongoTestClient : ITransferFormatFeature, IDisposable
 
     public TransferFormat ActiveFormat { get; set; }
 
-    public HubConnectionContext CreateHubConnectionContext()
+    public HubConnectionContext CreateHubConnectionContext(string? userId = null)
     {
-        return new HubConnectionContext(
+        if (userId is not null)
+        {
+            Connection.User = new ClaimsPrincipal(
+                new ClaimsIdentity(
+                    [new Claim(ClaimTypes.NameIdentifier, userId)]));
+        }
+
+        var ctx = new HubConnectionContext(
             Connection,
             new HubConnectionContextOptions
             {
@@ -43,6 +51,17 @@ internal sealed class MongoTestClient : ITransferFormatFeature, IDisposable
         {
             Protocol = _protocol
         };
+
+        if (userId is not null)
+        {
+            // HubConnectionContext.UserIdentifier has internal set in ASP.NET Core; use reflection
+            // to wire it up so the manager registers the correct user subscriptions.
+            typeof(HubConnectionContext)
+                .GetProperty("UserIdentifier")!
+                .SetValue(ctx, userId);
+        }
+
+        return ctx;
     }
 
     public async Task<HubMessage> ReadAsync(CancellationToken cancellationToken = default)
@@ -81,6 +100,22 @@ internal sealed class MongoTestClient : ITransferFormatFeature, IDisposable
     {
         Connection.Application!.Input.Complete();
         Connection.Application.Output.Complete();
+    }
+
+    /// <summary>
+    /// Returns true if there is at least one buffered message available to read without consuming it.
+    /// </summary>
+    public bool HasPendingMessage()
+    {
+        if (!Connection.Application!.Input.TryRead(out var result))
+        {
+            return false;
+        }
+
+        var buffer = result.Buffer;
+        // Peek: examined but not consumed — the data remains available for future reads.
+        Connection.Application.Input.AdvanceTo(buffer.Start, buffer.End);
+        return !buffer.IsEmpty;
     }
 
     private HubMessage? TryRead()
