@@ -17,7 +17,7 @@ namespace Kevsoft.AspNetCore.SignalR.MongoDB;
 /// The MongoDB scale-out provider for ASP.NET Core SignalR.
 /// </summary>
 /// <typeparam name="THub">The type of <see cref="Hub"/> to manage connections for.</typeparam>
-public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncDisposable, IDisposable where THub : Hub
+public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncDisposable where THub : Hub
 {
     private readonly HubConnectionStore _connections = new();
     private readonly MongoSubscriptionManager _groups = new();
@@ -713,12 +713,6 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
         }
 
         return false;
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        DisposeAsync().AsTask().GetAwaiter().GetResult();
     }
 
     /// <inheritdoc />

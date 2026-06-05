@@ -135,7 +135,7 @@ public class MongoDbDependencyInjectionTests
     public async Task ChannelPrefixIsComposedWithHubType()
     {
         var backplane = new FakeMongoSignalRBackplane();
-        using var manager = new MongoDbHubLifetimeManager<Hub>(
+        await using var manager = new MongoDbHubLifetimeManager<Hub>(
             Microsoft.Extensions.Logging.Abstractions.NullLogger<MongoDbHubLifetimeManager<Hub>>.Instance,
             Options.Create(new MongoDbSignalROptions
             {
