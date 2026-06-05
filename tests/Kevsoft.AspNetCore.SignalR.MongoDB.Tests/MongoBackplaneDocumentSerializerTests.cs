@@ -15,7 +15,7 @@ public class MongoBackplaneDocumentSerializerTests
         var deserialized = serializer.Deserialize(document);
 
         Assert.Equal("stream", document["streamId"].AsString);
-        Assert.Equal(envelope.Kind, deserialized.Kind);
+        Assert.Equal(envelope.Payload.GetType(), deserialized.Payload.GetType());
         Assert.Equal(envelope.Channel, deserialized.Channel);
     }
 

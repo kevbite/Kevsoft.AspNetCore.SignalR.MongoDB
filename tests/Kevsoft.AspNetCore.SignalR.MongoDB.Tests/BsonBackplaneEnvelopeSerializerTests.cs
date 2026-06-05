@@ -25,7 +25,7 @@ public class BsonBackplaneEnvelopeSerializerTests
         var deserialized = serializer.Deserialize(serializer.Serialize(envelope));
         var invocation = protocol.ReadInvocation(deserialized);
 
-        Assert.Equal(MongoBackplaneMessageKind.Invocation, deserialized.Kind);
+        Assert.IsType<MongoInvocationPayload>(deserialized.Payload);
         Assert.Equal("hub:all", deserialized.Channel);
         Assert.Equal("invocation-1", invocation.InvocationId);
         Assert.Equal("return-channel", invocation.ReturnChannel);

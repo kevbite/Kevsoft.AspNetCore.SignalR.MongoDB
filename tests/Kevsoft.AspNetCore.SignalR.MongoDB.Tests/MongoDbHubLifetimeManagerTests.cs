@@ -19,7 +19,7 @@ public class MongoDbHubLifetimeManagerTests
 
         Assert.True(backplane.Started);
         var envelope = Assert.Single(backplane.Published);
-        Assert.Equal(MongoBackplaneMessageKind.Invocation, envelope.Kind);
+        Assert.IsType<MongoInvocationPayload>(envelope.Payload);
     }
 
     [Fact]

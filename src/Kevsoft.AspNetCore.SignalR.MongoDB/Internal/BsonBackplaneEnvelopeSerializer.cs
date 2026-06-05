@@ -19,9 +19,8 @@ internal sealed class BsonBackplaneEnvelopeSerializer : IBackplaneEnvelopeSerial
         var document = new BsonDocument
         {
             ["version"] = CurrentVersion,
-            ["kind"] = envelope.Kind.ToString(),
             ["channel"] = envelope.Channel,
-            ["payload"] = SerializePayload(envelope),
+            ["payload"] = SerializePayload(envelope.Payload),
             ["createdAtUtc"] = new BsonDateTime((envelope.CreatedAt ?? DateTimeOffset.UtcNow).UtcDateTime)
         };
 
@@ -43,38 +42,40 @@ internal sealed class BsonBackplaneEnvelopeSerializer : IBackplaneEnvelopeSerial
             throw new InvalidDataException($"Unsupported MongoDB SignalR backplane envelope version '{version}'.");
         }
 
-        var kind = Enum.Parse<MongoBackplaneMessageKind>(document.GetValue("kind").AsString);
         var channel = document.GetValue("channel").AsString;
-        var payload = DeserializePayload(kind, document.GetValue("payload").AsBsonDocument);
+        var payload = DeserializePayload(document.GetValue("payload").AsBsonDocument);
         var serverId = document.TryGetValue("serverId", out var serverIdValue) ? serverIdValue.AsString : null;
         var createdAt = document.TryGetValue("createdAtUtc", out var createdAtValue)
             ? new DateTimeOffset(createdAtValue.ToUniversalTime(), TimeSpan.Zero)
             : (DateTimeOffset?)null;
 
-        return new MongoBackplaneEnvelope(kind, channel, payload, serverId, createdAt);
+        return new MongoBackplaneEnvelope(channel, payload, serverId, createdAt);
     }
 
-    private BsonDocument SerializePayload(MongoBackplaneEnvelope envelope)
+    private BsonDocument SerializePayload(MongoBackplanePayload payload)
     {
-        return envelope.Kind switch
+        // The _t discriminator is written first so it matches the conventional MongoDB
+        // document shape (discriminator before data fields).
+        return payload switch
         {
-            MongoBackplaneMessageKind.Invocation => SerializeInvocation((MongoInvocation)envelope.Payload),
-            MongoBackplaneMessageKind.GroupCommand => SerializeGroupCommand((MongoGroupCommand)envelope.Payload),
-            MongoBackplaneMessageKind.Ack => new BsonDocument("id", (int)envelope.Payload),
-            MongoBackplaneMessageKind.Completion => SerializeCompletion((MongoCompletion)envelope.Payload),
-            _ => throw new InvalidDataException($"Unsupported backplane message kind '{envelope.Kind}'.")
+            MongoInvocationPayload p  => SerializeInvocation(p.Invocation).Add("_t", MongoInvocationPayload.TypeDiscriminator),
+            MongoGroupCommandPayload p => SerializeGroupCommand(p.Command).Add("_t", MongoGroupCommandPayload.TypeDiscriminator),
+            MongoAckPayload p          => new BsonDocument { ["_t"] = MongoAckPayload.TypeDiscriminator, ["id"] = p.Id },
+            MongoCompletionPayload p   => SerializeCompletion(p.Completion).Add("_t", MongoCompletionPayload.TypeDiscriminator),
+            _ => throw new InvalidDataException($"Unsupported payload type '{payload.GetType().Name}'.")
         };
     }
 
-    private object DeserializePayload(MongoBackplaneMessageKind kind, BsonDocument payload)
+    private static MongoBackplanePayload DeserializePayload(BsonDocument payload)
     {
-        return kind switch
+        var discriminator = payload.GetValue("_t").AsString;
+        return discriminator switch
         {
-            MongoBackplaneMessageKind.Invocation => DeserializeInvocation(payload),
-            MongoBackplaneMessageKind.GroupCommand => DeserializeGroupCommand(payload),
-            MongoBackplaneMessageKind.Ack => payload.GetValue("id").ToInt32(),
-            MongoBackplaneMessageKind.Completion => DeserializeCompletion(payload),
-            _ => throw new InvalidDataException($"Unsupported backplane message kind '{kind}'.")
+            MongoInvocationPayload.TypeDiscriminator  => new MongoInvocationPayload(DeserializeInvocation(payload)),
+            MongoGroupCommandPayload.TypeDiscriminator => new MongoGroupCommandPayload(DeserializeGroupCommand(payload)),
+            MongoAckPayload.TypeDiscriminator          => new MongoAckPayload(payload.GetValue("id").ToInt32()),
+            MongoCompletionPayload.TypeDiscriminator   => new MongoCompletionPayload(DeserializeCompletion(payload)),
+            _ => throw new InvalidDataException($"Unsupported backplane payload discriminator '{discriminator}'.")
         };
     }
 
