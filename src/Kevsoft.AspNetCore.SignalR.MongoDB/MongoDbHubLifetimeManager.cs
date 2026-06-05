@@ -36,6 +36,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
     private readonly IReadOnlyDictionary<string, IHubProtocol> _hubProtocols;
     private volatile bool _backplaneStarted;
     private int _internalAckId;
+    private int _disposed;
 
     /// <summary>
     /// Constructs the <see cref="MongoDbHubLifetimeManager{THub}"/> with services from dependency injection.
@@ -432,6 +433,8 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
             return;
         }
 
+        ObjectDisposedException.ThrowIf(_disposed == 1, this);
+
         await _connectionLock.WaitAsync(cancellationToken);
         try
         {
@@ -439,6 +442,8 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
             {
                 return;
             }
+
+            ObjectDisposedException.ThrowIf(_disposed == 1, this);
 
             await _backplane.StartAsync(_channels.StreamId, cancellationToken);
             _coreSubscriptions.Add(await SubscribeToAll());
@@ -575,8 +580,12 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                         {
                             var tuple = ((MongoDbHubLifetimeManager<THub> Manager, string InvocationId))state!;
                             var invocationInfo = tuple.Manager._clientResultsManager.RemoveInvocation(tuple.InvocationId);
-                            var ignored = invocationInfo?.ForwardCompletion?.Invoke(
+                            var task = invocationInfo?.ForwardCompletion?.Invoke(
                                 CompletionMessage.WithError(tuple.InvocationId, "Connection disconnected."));
+                            if (task.HasValue)
+                            {
+                                ObserveForwardCompletion(task.Value, tuple.Manager._logger, tuple.InvocationId);
+                            }
                         }, (this, invocation.InvocationId));
                     }
 
@@ -718,28 +727,91 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
         _ackHandler.Dispose();
         _clientResultsManager.Dispose();
-        _connectionLock.Dispose();
 
         foreach (var subscription in _connectionSubscriptions.Values)
         {
-            await subscription.DisposeAsync();
+            try
+            {
+                await subscription.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Ignoring error while disposing MongoDB SignalR connection subscription.");
+            }
         }
 
         foreach (var subscription in _coreSubscriptions)
         {
-            await subscription.DisposeAsync();
+            try
+            {
+                await subscription.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Ignoring error while disposing MongoDB SignalR core subscription.");
+            }
         }
 
         await _groups.DisposeAsync();
         await _users.DisposeAsync();
         await _backplane.DisposeAsync();
+
+        // Dispose the lock last so EnsureBackplaneStarted can still acquire it if it
+        // races with disposal; it will then see _disposed == 1 and bail out.
+        _connectionLock.Dispose();
     }
 
     private static string GenerateServerName()
     {
         return $"{Environment.MachineName}_{Guid.NewGuid():N}";
+    }
+
+    // Invoked from a synchronous CancellationToken.Register callback where the ValueTask
+    // cannot be awaited directly. Observes the task and logs any failure so the exception
+    // is never silently swallowed.
+    private static void ObserveForwardCompletion(ValueTask task, ILogger logger, string invocationId)
+    {
+        if (task.IsCompletedSuccessfully)
+        {
+            return;
+        }
+
+        if (task.IsFaulted || task.IsCanceled)
+        {
+            try
+            {
+                task.GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Failed to forward disconnection completion for invocation '{InvocationId}'.",
+                    invocationId);
+            }
+
+            return;
+        }
+
+        // Asynchronously pending — attach a continuation to log failure without blocking.
+        _ = task.AsTask().ContinueWith(
+            static (t, state) =>
+            {
+                var (log, id) = ((ILogger, string))state!;
+                log.LogError(t.Exception!.GetBaseException(),
+                    "Failed to forward disconnection completion for invocation '{InvocationId}'.",
+                    id);
+            },
+            (logger, invocationId),
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
     }
 
     private static string GenerateInvocationId()
