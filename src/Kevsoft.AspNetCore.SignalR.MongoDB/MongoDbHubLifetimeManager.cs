@@ -80,7 +80,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
 
         connection.Features.Set<IMongoDbFeature>(new MongoDbFeature());
         _connections.Add(connection);
-        await _backplane.AddConnectionAsync(connection.ConnectionId, _serverName, connection.ConnectionAborted);
+        await _backplane.AddConnectionAsync(connection.ConnectionId, _serverName);
 
         var connectionTask = SubscribeToConnection(connection);
         var userTask = string.IsNullOrEmpty(connection.UserIdentifier)
