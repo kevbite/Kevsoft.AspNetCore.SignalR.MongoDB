@@ -54,6 +54,7 @@ public class MongoDbBackplaneStartupTests
         {
             CollectionName = "messages_" + Guid.NewGuid().ToString("N"),
             RunCollectionSetupOnStartup = false,
+            CheckpointStore = new InMemoryMessageCheckpointStore(),
         };
 
         if (transportMode == MongoDbSignalRTransportMode.TailableAwait)

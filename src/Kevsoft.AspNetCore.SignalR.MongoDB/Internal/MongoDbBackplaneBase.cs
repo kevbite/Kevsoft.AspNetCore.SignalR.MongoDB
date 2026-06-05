@@ -29,7 +29,9 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
         Logger = logger;
         Collection = database.GetCollection<BsonDocument>(options.CollectionName);
         PresenceCollection = database.GetCollection<BsonDocument>(options.CollectionName + "_connections");
-        CheckpointStore = options.CheckpointStore ?? new InMemoryMessageCheckpointStore();
+        CheckpointStore = options.CheckpointStore
+            ?? throw new ArgumentNullException(nameof(options),
+                "CheckpointStore must be configured; ensure AddMongoDb() is used to register services.");
         _documentSerializer = new MongoBackplaneDocumentSerializer(envelopeSerializer);
         _presenceHeartbeatPeriod = TimeSpan.FromMilliseconds(Math.Max(5000, options.ConnectionPresenceTtl.TotalMilliseconds / 3));
     }
