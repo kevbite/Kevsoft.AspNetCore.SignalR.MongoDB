@@ -8,7 +8,7 @@ This file captures project-specific guidance for humans and AI agents working on
 - Keep the core package BSON-first. Do not add MessagePack to the core package; preserve serializer extension points so a separate optional MessagePack package can be added later.
 - Target modern .NET practices and keep the library compatible with the configured target frameworks in the project file.
 - Follow the ASP.NET Core Redis scale-out provider patterns where they fit, but do not copy Redis semantics that MongoDB cannot provide.
-- Prefer small, descriptive commits
+- Prefer small, descriptive commits.
 
 ## Design principles
 
@@ -21,6 +21,8 @@ This file captures project-specific guidance for humans and AI agents working on
   - lifecycle, cancellation, disposal, and reconnect plumbing.
 - `MongoDbHubLifetimeManager<THub>` should depend on abstractions, not concrete MongoDB transport implementations.
 - Do not add broad catches or silent fallbacks. Log malformed documents and transport interruptions with actionable context.
+- Do not start asynchronous work from synchronous callbacks without observing it. `CancellationToken.Register`, timers, and continuations must either complete synchronously or route `Task`/`ValueTask` failures to an awaited/logged path.
+- Disposal must be idempotent and concurrency-safe. Once disposal starts, reject or immediately clean up new connections/subscriptions, and keep disposing remaining resources even if one disposal path fails.
 - Preserve SignalR scale-out semantics:
   - broadcast, group, and user messages loop through the backplane, including on the publishing server.
   - local `SendConnectionAsync` writes directly and should not publish to MongoDB.
@@ -33,8 +35,11 @@ This file captures project-specific guidance for humans and AI agents working on
 - Cold start must begin from "now" and must not replay old backplane messages into current SignalR connections.
 - Checkpoints are for transient in-process recovery only. Do not seed an initial cold-start cursor from a durable checkpoint store.
 - Use a consistent top-level `streamId` to isolate hubs/apps sharing a collection.
-- Treat malformed or foreign documents as per-document failures: log, skip, and keep the reader loop alive.
-- Do not let slow channel handlers block the transport reader loop indefinitely, especially for ack and client-result channels.
+- Treat malformed or foreign documents as per-document failures: validate BSON field presence and types before reading values, log malformed documents, skip them, and keep the reader loop alive.
+- Do not let slow channel handlers block the transport reader loop indefinitely, especially for ack and client-result channels. If dispatch is decoupled from reading, use bounded queues/backpressure and actionable slow-handler logging.
+- Avoid `CancellationToken.None` in shutdown-relevant async paths unless the operation is deliberately best-effort and exceptions are still observed/logged.
+- Subscription registries for dynamic channels must clean up empty channel entries so connection, group, and user churn cannot grow dictionaries forever.
+- Presence cleanup should be scoped to the current stream and server identity so shutdown of one server cannot delete another server's live presence records.
 
 ### Tailable-await
 
@@ -66,6 +71,10 @@ This file captures project-specific guidance for humans and AI agents working on
 - If a reader cannot open before initial readiness is signaled, fail startup and stop background tasks instead of retrying forever behind a hung host startup.
 - The public DI API spelling is `AddMongoDb(...)`. Keep README examples and tests aligned with that spelling.
 - `ChannelPrefix` is an application prefix; the manager composes it with the hub type to prevent cross-hub leakage.
+- Cover error paths alongside happy paths: malformed BSON documents, unknown payload discriminators, unsupported versions, wrong BSON types, and handler exceptions must prove the reader continues.
+- Cover lifecycle edge cases: concurrent disposal, disposal while handlers are running, cancellation callback failures, pending ack/client-result cleanup, and subscription churn.
+- Cover remote coordination failures: ack timeout when a remote server is missing or slow, client-result disconnection/cancellation/wrong-type/protocol errors, and stale or expired presence records.
+- Cover transport-specific recovery: tailable-await non-capped collection failure, sentinel skipping, cold-start non-replay, and change-stream resume-token persistence plus invalid-token live restart.
 
 ## Release expectations
 
