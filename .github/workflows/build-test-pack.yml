@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
 
 env:
   DOTNET_NOLOGO: true
@@ -53,8 +54,26 @@ jobs:
       - name: Fast tests
         run: dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration "$CONFIGURATION" --no-build --filter "Category!=Integration" --results-directory artifacts/test-results/fast --logger "trx;LogFileName=fast.trx" --collect "XPlat Code Coverage"
 
+      - name: Report fast test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Fast Tests
+          path: artifacts/test-results/fast/*.trx
+          reporter: dotnet-trx
+          fail-on-error: false
+
       - name: MongoDB integration tests
         run: dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration "$CONFIGURATION" --no-build --filter "Category=Integration" --results-directory artifacts/test-results/integration --logger "trx;LogFileName=integration.trx" --collect "XPlat Code Coverage"
+
+      - name: Report integration test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Integration Tests
+          path: artifacts/test-results/integration/*.trx
+          reporter: dotnet-trx
+          fail-on-error: false
 
       - name: Capture Docker logs on failure
         if: failure()
