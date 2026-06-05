@@ -5,16 +5,31 @@ namespace Kevsoft.AspNetCore.SignalR.MongoDB.Internal;
 
 internal sealed class MongoSubscriptionManager : IAsyncDisposable
 {
+    // Stripe count: enough buckets to minimise cross-channel collisions while
+    // keeping memory overhead negligible. Independent channels that hash to
+    // different stripes can now add/remove subscriptions concurrently instead
+    // of serialising behind a single global lock.
+    private static readonly int StripeCount = Math.Max(8, Environment.ProcessorCount * 2);
+
     private readonly ConcurrentDictionary<string, HubConnectionStore> _subscriptions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, IAsyncDisposable> _subscriptionDisposables = new(StringComparer.Ordinal);
-    private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly SemaphoreSlim[] _stripes =
+        Enumerable.Range(0, StripeCount).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
+
+    private SemaphoreSlim GetStripe(string id)
+    {
+        // Use unsigned modulo to avoid negative indices from negative hash codes.
+        var index = (uint)string.GetHashCode(id, StringComparison.Ordinal) % (uint)StripeCount;
+        return _stripes[index];
+    }
 
     public async Task AddSubscriptionAsync(
         string id,
         HubConnectionContext connection,
         Func<string, HubConnectionStore, ValueTask<IAsyncDisposable>> subscribeMethod)
     {
-        await _lock.WaitAsync();
+        var stripe = GetStripe(id);
+        await stripe.WaitAsync();
 
         try
         {
@@ -34,13 +49,14 @@ internal sealed class MongoSubscriptionManager : IAsyncDisposable
         }
         finally
         {
-            _lock.Release();
+            stripe.Release();
         }
     }
 
     public async Task RemoveSubscriptionAsync(string id, HubConnectionContext connection)
     {
-        await _lock.WaitAsync();
+        var stripe = GetStripe(id);
+        await stripe.WaitAsync();
 
         try
         {
@@ -62,7 +78,7 @@ internal sealed class MongoSubscriptionManager : IAsyncDisposable
         }
         finally
         {
-            _lock.Release();
+            stripe.Release();
         }
     }
 
@@ -75,6 +91,10 @@ internal sealed class MongoSubscriptionManager : IAsyncDisposable
 
         _subscriptionDisposables.Clear();
         _subscriptions.Clear();
-        _lock.Dispose();
+
+        foreach (var stripe in _stripes)
+        {
+            stripe.Dispose();
+        }
     }
 }
