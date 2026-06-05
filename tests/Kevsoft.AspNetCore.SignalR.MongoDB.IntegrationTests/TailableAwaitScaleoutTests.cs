@@ -15,6 +15,7 @@ public class TailableAwaitScaleoutTests(TailableAwaitContainerFixture fixture)
             CollectionName = collectionName,
             AckTimeout = TimeSpan.FromSeconds(15),
             ConnectionPresenceTtl = TimeSpan.FromMinutes(1),
+            CheckpointStore = new InMemoryMessageCheckpointStore(),
         };
         options.UseTailableAwait(o =>
         {

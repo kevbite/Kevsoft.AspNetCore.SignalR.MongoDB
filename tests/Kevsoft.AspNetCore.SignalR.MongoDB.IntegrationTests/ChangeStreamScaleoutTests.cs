@@ -15,6 +15,7 @@ public class ChangeStreamScaleoutTests(ChangeStreamContainerFixture fixture)
             CollectionName = collectionName,
             AckTimeout = TimeSpan.FromSeconds(15),
             ConnectionPresenceTtl = TimeSpan.FromMinutes(1),
+            CheckpointStore = new InMemoryMessageCheckpointStore(),
         };
         options.UseChangeStreams(o => o.MessageTtl = TimeSpan.FromMinutes(5));
 
