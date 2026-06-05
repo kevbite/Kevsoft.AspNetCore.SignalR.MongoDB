@@ -82,6 +82,16 @@ internal sealed class MongoBackplaneSubscriptionRegistry
                 lock (subscriptions)
                 {
                     subscriptions.Remove(this);
+
+                    // Remove the channel entry when it is empty so that high-churn channels
+                    // (per-connection, per-user, per-group) do not grow the dictionary without
+                    // bound. Use the value-specific overload to atomically verify we are
+                    // removing our own list, not a new one added by a concurrent Add() call.
+                    if (subscriptions.Count == 0)
+                    {
+                        owner._subscriptions.TryRemove(
+                            new KeyValuePair<string, List<Subscription>>(channel, subscriptions));
+                    }
                 }
             }
 
