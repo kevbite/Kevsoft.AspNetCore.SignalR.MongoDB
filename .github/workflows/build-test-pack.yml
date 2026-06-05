@@ -1,0 +1,140 @@
+name: Build, Test, and Pack
+
+on:
+  workflow_call:
+    inputs:
+      package_version:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  CONFIGURATION: Release
+  PACKAGE_VERSION: ${{ inputs.package_version }}
+
+jobs:
+  build-test-pack:
+    name: Build, test, and pack
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+            10.0.x
+          dotnet-quality: ga
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '*.slnx', 'global.json', '.github/workflows/*.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore Kevsoft.AspNetCore.SignalR.MongoDB.slnx
+
+      - name: Build
+        run: dotnet build Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration "$CONFIGURATION" --no-restore /p:Version="$PACKAGE_VERSION" /p:PackageVersion="$PACKAGE_VERSION"
+
+      - name: Fast tests
+        run: dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration "$CONFIGURATION" --no-build --filter "Category!=Integration" --results-directory artifacts/test-results/fast --logger "trx;LogFileName=fast.trx" --collect "XPlat Code Coverage"
+
+      - name: MongoDB integration tests
+        run: dotnet test Kevsoft.AspNetCore.SignalR.MongoDB.slnx --configuration "$CONFIGURATION" --no-build --filter "Category=Integration" --results-directory artifacts/test-results/integration --logger "trx;LogFileName=integration.trx" --collect "XPlat Code Coverage"
+
+      - name: Capture Docker logs on failure
+        if: failure()
+        run: |
+          mkdir -p artifacts/docker-logs
+          docker ps -a --format '{{.ID}} {{.Image}} {{.Names}}' | while read -r id image name; do
+            if echo "$image" | grep -qi 'mongo'; then
+              docker logs "$id" > "artifacts/docker-logs/${name}.log" 2>&1 || true
+            fi
+          done
+
+      - name: Pack
+        run: dotnet pack src/Kevsoft.AspNetCore.SignalR.MongoDB/Kevsoft.AspNetCore.SignalR.MongoDB.csproj --configuration "$CONFIGURATION" --no-build --output artifacts/package /p:Version="$PACKAGE_VERSION" /p:PackageVersion="$PACKAGE_VERSION"
+
+      - name: Validate package
+        run: |
+          set -euo pipefail
+          package="artifacts/package/Kevsoft.AspNetCore.SignalR.MongoDB.${PACKAGE_VERSION}.nupkg"
+          symbols="artifacts/package/Kevsoft.AspNetCore.SignalR.MongoDB.${PACKAGE_VERSION}.snupkg"
+          test -f "$package"
+          test -f "$symbols"
+          unzip -l "$package" | grep -q 'README.md'
+          unzip -p "$package" 'Kevsoft.AspNetCore.SignalR.MongoDB.nuspec' | grep -q '<id>Kevsoft.AspNetCore.SignalR.MongoDB</id>'
+          unzip -p "$package" 'Kevsoft.AspNetCore.SignalR.MongoDB.nuspec' | grep -q "<version>${PACKAGE_VERSION}</version>"
+          unzip -p "$package" 'Kevsoft.AspNetCore.SignalR.MongoDB.nuspec' | grep -q '<authors>Kevin Smith</authors>'
+          unzip -p "$package" 'Kevsoft.AspNetCore.SignalR.MongoDB.nuspec' | grep -q '<license type="expression">MIT</license>'
+          unzip -p "$package" 'Kevsoft.AspNetCore.SignalR.MongoDB.nuspec' | grep -q '<readme>README.md</readme>'
+          unzip -p "$package" 'Kevsoft.AspNetCore.SignalR.MongoDB.nuspec' | grep -q 'https://github.com/kevbite/Kevsoft.AspNetCore.SignalR.MongoDB'
+          unzip -l "$package" | grep -q 'lib/net8.0/Kevsoft.AspNetCore.SignalR.MongoDB.xml'
+          unzip -l "$package" | grep -q 'lib/net9.0/Kevsoft.AspNetCore.SignalR.MongoDB.xml'
+          unzip -l "$package" | grep -q 'lib/net10.0/Kevsoft.AspNetCore.SignalR.MongoDB.xml'
+
+      - name: Validate package consumption
+        run: |
+          set -euo pipefail
+          dotnet new web -n PackageConsumer -o artifacts/sample/PackageConsumer --framework net10.0
+          dotnet nuget add source "$(pwd)/artifacts/package" --name local-package-source
+          dotnet add artifacts/sample/PackageConsumer/PackageConsumer.csproj package Kevsoft.AspNetCore.SignalR.MongoDB --version "$PACKAGE_VERSION" --source "$(pwd)/artifacts/package"
+          cat > artifacts/sample/PackageConsumer/Program.cs <<'CS'
+          using Kevsoft.AspNetCore.SignalR.MongoDB;
+          using Microsoft.AspNetCore.SignalR;
+
+          var builder = WebApplication.CreateBuilder(args);
+          builder.Services.AddSignalR().AddMongoDb(options =>
+          {
+              options.ConnectionString = "mongodb://localhost:27017/app";
+              options.DatabaseName = "app";
+          });
+
+          var app = builder.Build();
+          app.MapHub<ChatHub>("/hub");
+          app.Run();
+
+          public sealed class ChatHub : Hub
+          {
+          }
+          CS
+          dotnet build artifacts/sample/PackageConsumer/PackageConsumer.csproj --configuration "$CONFIGURATION" --no-restore
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ inputs.package_version }}
+          path: artifacts/package/*
+          if-no-files-found: error
+
+      - name: Upload test and coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ inputs.package_version }}
+          path: |
+            artifacts/test-results/**/*.trx
+            artifacts/test-results/**/coverage.cobertura.xml
+          if-no-files-found: ignore
+
+      - name: Upload Docker logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-logs-${{ inputs.package_version }}
+          path: artifacts/docker-logs/*
+          if-no-files-found: ignore

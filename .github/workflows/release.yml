@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  prepare:
+    name: Determine package version
+    runs-on: ubuntu-latest
+    outputs:
+      package_version: ${{ steps.version.outputs.package_version }}
+
+    steps:
+      - name: Derive version from tag
+        id: version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "::error::Tag '$tag' must use SemVer format like v1.2.3 or v1.2.3-preview.1."
+            exit 1
+          fi
+          echo "package_version=$version" >> "$GITHUB_OUTPUT"
+
+  build-test-pack:
+    name: Build, test, and pack
+    needs: prepare
+    uses: ./.github/workflows/build-test-pack.yml
+    with:
+      package_version: ${{ needs.prepare.outputs.package_version }}
+
+  publish:
+    name: Publish NuGet package
+    needs: [prepare, build-test-pack]
+    runs-on: ubuntu-latest
+    environment: nuget-production
+
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          name: packages-${{ needs.prepare.outputs.package_version }}
+          path: artifacts/package
+
+      - name: Publish package to nuget.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NUGET_API_KEY}" ]; then
+            echo "::error::NUGET_API_KEY is not configured in the nuget-production environment."
+            exit 1
+          fi
+          dotnet nuget push "artifacts/package/*.nupkg" --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" artifacts/package/*.nupkg artifacts/package/*.snupkg --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" artifacts/package/*.nupkg artifacts/package/*.snupkg --title "$GITHUB_REF_NAME" --generate-notes
+          fi
