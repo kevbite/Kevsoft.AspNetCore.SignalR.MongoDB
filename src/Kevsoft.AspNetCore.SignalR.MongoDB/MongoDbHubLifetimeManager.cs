@@ -33,7 +33,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
     private readonly AckHandler _ackHandler;
     private readonly ClientResultsManager _clientResultsManager = new();
     private readonly IHubProtocolResolver _hubProtocolResolver;
-    private bool _backplaneStarted;
+    private volatile bool _backplaneStarted;
     private int _internalAckId;
 
     /// <summary>

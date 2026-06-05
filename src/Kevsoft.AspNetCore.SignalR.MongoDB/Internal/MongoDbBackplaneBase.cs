@@ -15,7 +15,7 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
     private readonly TimeSpan _presenceHeartbeatPeriod;
     private Task? _readTask;
     private Task? _presenceTask;
-    private bool _started;
+    private volatile bool _started;
     private int _disposed;
 
     protected MongoDbBackplaneBase(
