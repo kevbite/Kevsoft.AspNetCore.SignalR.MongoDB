@@ -455,7 +455,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
 
     private ValueTask<IAsyncDisposable> SubscribeToAll()
     {
-        return _backplane.SubscribeAsync(_channels.All, async (envelope, _) =>
+        return _backplane.SubscribeAsync(_channels.All, async (envelope, cancellationToken) =>
         {
             try
             {
@@ -466,7 +466,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                     if (invocation.ExcludedConnectionIds == null ||
                         !invocation.ExcludedConnectionIds.Contains(connection.ConnectionId))
                     {
-                        tasks.Add(connection.WriteAsync(invocation.Message).AsTask());
+                        tasks.Add(connection.WriteAsync(invocation.Message, cancellationToken).AsTask());
                     }
                 }
 
@@ -533,7 +533,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
     {
         var subscription = await _backplane.SubscribeAsync(
             _channels.Connection(connection.ConnectionId),
-            async (envelope, _) =>
+            async (envelope, cancellationToken) =>
             {
                 try
                 {
@@ -572,7 +572,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                         }, (this, invocation.InvocationId));
                     }
 
-                    await connection.WriteAsync(invocation.Message);
+                    await connection.WriteAsync(invocation.Message, cancellationToken);
                 }
                 catch (Exception ex)
                 {
@@ -585,7 +585,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
 
     private ValueTask<IAsyncDisposable> SubscribeToUserAsync(string userChannel, HubConnectionStore subscriptions)
     {
-        return _backplane.SubscribeAsync(userChannel, async (envelope, _) =>
+        return _backplane.SubscribeAsync(userChannel, async (envelope, cancellationToken) =>
         {
             try
             {
@@ -593,7 +593,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                 var tasks = new List<Task>(subscriptions.Count);
                 foreach (var connection in subscriptions)
                 {
-                    tasks.Add(connection.WriteAsync(invocation.Message).AsTask());
+                    tasks.Add(connection.WriteAsync(invocation.Message, cancellationToken).AsTask());
                 }
 
                 await Task.WhenAll(tasks);
@@ -607,7 +607,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
 
     private ValueTask<IAsyncDisposable> SubscribeToGroupAsync(string groupChannel, HubConnectionStore subscriptions)
     {
-        return _backplane.SubscribeAsync(groupChannel, async (envelope, _) =>
+        return _backplane.SubscribeAsync(groupChannel, async (envelope, cancellationToken) =>
         {
             try
             {
@@ -620,7 +620,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                         continue;
                     }
 
-                    tasks.Add(connection.WriteAsync(invocation.Message).AsTask());
+                    tasks.Add(connection.WriteAsync(invocation.Message, cancellationToken).AsTask());
                 }
 
                 await Task.WhenAll(tasks);
