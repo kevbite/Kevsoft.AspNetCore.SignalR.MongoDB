@@ -4,22 +4,25 @@
 
 ## Setup
 
-Register MongoDB scale-out from the SignalR server builder:
+Register MongoDB scale-out from the SignalR server builder. Use the `Use*` methods on the options
+object to configure each concern — they group related properties together so it is clear which
+settings belong together and prevent mixing incompatible configuration.
+
+### Connection string
 
 ```csharp
 builder.Services
     .AddSignalR()
     .AddMongoDb(options =>
     {
-        options.ConnectionString = builder.Configuration.GetConnectionString("MongoDB");
-        options.DatabaseName = "my_app";
+        options.UseConnectionString(builder.Configuration.GetConnectionString("MongoDB")!, "my_app");
+        options.UseChangeStreams();
         options.CollectionName = "signalr_messages";
         options.ChannelPrefix = "my-app";
-        options.TransportMode = MongoDbSignalRTransportMode.ChangeStreams;
     });
 ```
 
-If the connection string includes the database name, the connection string overload can infer `DatabaseName`:
+If the connection string already includes a database name, the single-argument overload infers it:
 
 ```csharp
 builder.Services
@@ -27,21 +30,70 @@ builder.Services
     .AddMongoDb("mongodb://localhost:27017/my_app");
 ```
 
-For tailable-await:
+### Existing `IMongoClient`
+
+If your application already configures a `MongoClient`, pass a factory together with the database name:
 
 ```csharp
 builder.Services
     .AddSignalR()
     .AddMongoDb(options =>
     {
-        options.ConnectionString = builder.Configuration.GetConnectionString("MongoDB");
-        options.DatabaseName = "my_app";
-        options.CollectionName = "signalr_capped_messages";
-        options.TransportMode = MongoDbSignalRTransportMode.TailableAwait;
-        options.TailableCollectionSizeBytes = 64 * 1024 * 1024;
-        options.TailableAwaitMaxAwaitTime = TimeSpan.FromSeconds(1);
+        options.UseMongoClient(sp => sp.GetRequiredService<IMongoClient>(), "my_app");
     });
 ```
+
+### Existing `IMongoDatabase`
+
+If your application registers an `IMongoDatabase` directly (e.g. via a shared infrastructure
+registration), call `UseMongoDatabase` inside any `AddMongoDb` callback. Connection string and
+database name are not required when using this path:
+
+```csharp
+builder.Services
+    .AddSignalR()
+    .AddMongoDb(options =>
+    {
+        options.UseMongoDatabase(sp => sp.GetRequiredService<IMongoDatabase>());
+    });
+```
+
+### Tailable-await (standalone MongoDB)
+
+```csharp
+builder.Services
+    .AddSignalR()
+    .AddMongoDb(options =>
+    {
+        options.UseConnectionString(builder.Configuration.GetConnectionString("MongoDB")!, "my_app");
+        options.UseTailableAwait(o =>
+        {
+            o.CollectionSizeBytes = 64 * 1024 * 1024;
+            o.MaxAwaitTime = TimeSpan.FromSeconds(1);
+        });
+        options.CollectionName = "signalr_capped_messages";
+    });
+```
+
+### Resolving configuration from DI inside the callback
+
+All `AddMongoDb` overloads have an `Action<IServiceProvider, MongoDbSignalROptions>` variant that
+gives access to the root service provider. This is useful when the MongoDB settings live in a
+registered service rather than being available at registration time:
+
+```csharp
+builder.Services
+    .AddSignalR()
+    .AddMongoDb((sp, options) =>
+    {
+        var cfg = sp.GetRequiredService<IConfiguration>();
+        options.UseConnectionString(cfg.GetConnectionString("MongoDB")!, cfg["SignalR:Database"]!);
+        options.ChannelPrefix = cfg["App:Name"];
+    });
+```
+
+> **Note:** The `IServiceProvider` passed to these callbacks is the root (singleton-scope) provider.
+> Do not resolve scoped services from it.
 
 ## Transport modes
 
@@ -55,23 +107,50 @@ Both modes treat SignalR backplane messages as ephemeral. Cold starts begin from
 
 ## Key options
 
-| Option | Purpose |
-| --- | --- |
-| `ConnectionString` | MongoDB connection string used when no custom client factory is provided. |
-| `DatabaseName` | Database containing the backplane collection. |
-| `CollectionName` | Collection used for SignalR backplane message documents. |
-| `TransportMode` | Selects `ChangeStreams` or `TailableAwait`. |
-| `MongoClientFactory` | Allows applications to provide an existing `IMongoClient`. |
-| `ChannelPrefix` | Isolates applications sharing the same MongoDB collection. It is combined with the hub type so multiple hubs stay isolated. |
-| `AckTimeout` | Timeout for remote group-management acknowledgements. |
-| `TailableAwaitMaxAwaitTime` | Max idle server wait for tailable-await cursor operations. |
-| `TailableCollectionSizeBytes` | Capped collection size for the tailable-await transport. |
-| `MessageTtl` | Retention period for cleanup-capable transports. |
-| `ConnectionPresenceTtl` | How long remote connection presence records are considered valid without a heartbeat. |
-| `CheckpointStore` | Stores transient in-process cursor checkpoints. |
-| `CreateCollectionIfMissing` | Allows startup collection creation. |
-| `CreateIndexes` | Allows startup index creation. |
-| `RunCollectionSetupOnStartup` | Runs collection/index setup during startup. |
+The `Use*` methods on `MongoDbSignalROptions` are the only way to configure connection and transport
+properties (their setters are private). General options use regular property assignment.
+
+### Connection methods
+
+| Method | Properties set | Use when |
+| --- | --- | --- |
+| `UseConnectionString(string)` | `ConnectionString`, `DatabaseName` (inferred from URL) | Connection string includes the database name |
+| `UseConnectionString(string, string, Action<MongoClientSettings>?)` | `ConnectionString`, `DatabaseName`, `ConfigureClientSettings` | Connection string and database name provided separately; optional driver settings |
+| `UseMongoClient(factory, string)` | `MongoClientFactory`, `DatabaseName` | An `IMongoClient` is already registered in the container |
+| `UseMongoDatabase(factory)` | `MongoDatabaseFactory` | An `IMongoDatabase` is already registered in the container |
+
+### Transport methods
+
+| Method | Properties set | Use when |
+| --- | --- | --- |
+| `UseChangeStreams(Action<MongoDbSignalRChangeStreamOptions>?)` | `TransportMode`, `MessageTtl` | Replica set or sharded cluster (recommended default) |
+| `UseTailableAwait(Action<MongoDbSignalRTailableAwaitOptions>?)` | `TransportMode`, `TailableAwaitMaxAwaitTime`, `TailableCollectionSizeBytes` | Standalone MongoDB |
+
+### `MongoDbSignalRChangeStreamOptions`
+
+| Property | Default | Purpose |
+| --- | --- | --- |
+| `MessageTtl` | 1 day | Retention period for backplane documents; used to configure a TTL index. |
+
+### `MongoDbSignalRTailableAwaitOptions`
+
+| Property | Default | Purpose |
+| --- | --- | --- |
+| `MaxAwaitTime` | 1 second | Max idle server wait before the cursor returns an empty batch. |
+| `CollectionSizeBytes` | 64 MB | Capped collection size. Size for peak throughput × tolerated outage window. |
+
+### General options
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `CollectionName` | `signalr_messages` | Collection used for backplane message documents. |
+| `ChannelPrefix` | `null` | Isolates applications sharing the same collection. Combined with the hub type. |
+| `AckTimeout` | 30 s | Timeout for remote group-management acknowledgements. |
+| `ConnectionPresenceTtl` | 2 min | How long remote connection presence records are considered valid without a heartbeat. |
+| `CheckpointStore` | In-memory | Stores transient in-process cursor checkpoints. |
+| `CreateCollectionIfMissing` | `true` | Creates the backplane collection on startup if it does not exist. |
+| `CreateIndexes` | `true` | Creates required indexes on startup. |
+| `RunCollectionSetupOnStartup` | `true` | Runs collection and index setup during startup. |
 
 ## Operational notes
 
