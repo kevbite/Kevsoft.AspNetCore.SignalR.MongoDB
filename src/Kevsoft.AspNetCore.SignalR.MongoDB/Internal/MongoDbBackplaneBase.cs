@@ -202,9 +202,11 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
 
     protected async ValueTask<bool> CollectionExistsAsync(string collectionName, CancellationToken cancellationToken)
     {
-        using var cursor = await Database.ListCollectionNamesAsync(cancellationToken: cancellationToken);
-        var names = await cursor.ToListAsync(cancellationToken);
-        return names.Any(name => string.Equals(name, collectionName, StringComparison.Ordinal));
+        var filter = Builders<BsonDocument>.Filter.Eq("name", collectionName);
+        using var cursor = await Database.ListCollectionNamesAsync(
+            new ListCollectionNamesOptions { Filter = filter },
+            cancellationToken);
+        return await cursor.AnyAsync(cancellationToken);
     }
 
     protected async ValueTask DispatchDocumentAsync(BsonDocument document, CancellationToken cancellationToken)
