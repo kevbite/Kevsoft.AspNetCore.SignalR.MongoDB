@@ -53,10 +53,13 @@ public class MongoDbBackplaneStartupTests
         var options = new MongoDbSignalROptions
         {
             CollectionName = "messages_" + Guid.NewGuid().ToString("N"),
-            TransportMode = transportMode,
             RunCollectionSetupOnStartup = false,
-            TailableAwaitMaxAwaitTime = TimeSpan.FromMilliseconds(100)
         };
+
+        if (transportMode == MongoDbSignalRTransportMode.TailableAwait)
+            options.UseTailableAwait(o => o.MaxAwaitTime = TimeSpan.FromMilliseconds(100));
+        else
+            options.UseChangeStreams();
         var serializer = new BsonBackplaneEnvelopeSerializer(
             new TestHubProtocolResolver(new JsonHubProtocol()));
 

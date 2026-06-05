@@ -13,8 +13,7 @@ public class MongoDbDependencyInjectionTests
     {
         await using var provider = CreateServices(options =>
         {
-            options.ConnectionString = "mongodb://localhost:27017";
-            options.DatabaseName = "app";
+            options.UseConnectionString("mongodb://localhost:27017", "app");
         }).BuildServiceProvider();
 
         var lifetimeManager = provider.GetRequiredService<HubLifetimeManager<Hub>>();
@@ -47,7 +46,7 @@ public class MongoDbDependencyInjectionTests
             .AddMongoDb("mongodb://localhost:27017/app", options =>
             {
                 options.CollectionName = "custom_messages";
-                options.TransportMode = MongoDbSignalRTransportMode.TailableAwait;
+                options.UseTailableAwait();
             })
             .Services
             .BuildServiceProvider();
@@ -64,12 +63,11 @@ public class MongoDbDependencyInjectionTests
         var factoryCalled = false;
         using var provider = CreateServices(options =>
         {
-            options.DatabaseName = "app";
-            options.MongoClientFactory = _ =>
+            options.UseMongoClient(_ =>
             {
                 factoryCalled = true;
                 return new MongoClient("mongodb://localhost:27017");
-            };
+            }, "app");
         }).BuildServiceProvider();
 
         _ = provider.GetRequiredService<IMongoDatabase>();
@@ -84,9 +82,11 @@ public class MongoDbDependencyInjectionTests
     {
         await using var provider = CreateServices(options =>
         {
-            options.ConnectionString = "mongodb://localhost:27017";
-            options.DatabaseName = "app";
-            options.TransportMode = transportMode;
+            options.UseConnectionString("mongodb://localhost:27017", "app");
+            if (transportMode == MongoDbSignalRTransportMode.TailableAwait)
+                options.UseTailableAwait();
+            else
+                options.UseChangeStreams();
         }).BuildServiceProvider();
 
         var backplane = provider.GetRequiredService<IMongoSignalRBackplane>();
@@ -104,8 +104,7 @@ public class MongoDbDependencyInjectionTests
             .AddSignalR()
             .AddMongoDb(options =>
             {
-                options.ConnectionString = "mongodb://localhost:27017";
-                options.DatabaseName = "app";
+                options.UseConnectionString("mongodb://localhost:27017", "app");
             });
 
         using var provider = services.BuildServiceProvider();
@@ -117,10 +116,11 @@ public class MongoDbDependencyInjectionTests
     [Fact]
     public void InvalidOptionsFailValidation()
     {
+        // UseConnectionString("mongodb://localhost:27017") infers no DatabaseName (no DB in URL),
+        // so the validator fires for both missing database and zero AckTimeout.
         using var provider = CreateServices(options =>
         {
-            options.ConnectionString = "mongodb://localhost:27017";
-            options.DatabaseName = "";
+            options.UseConnectionString("mongodb://localhost:27017");
             options.AckTimeout = TimeSpan.Zero;
         }).BuildServiceProvider();
 
@@ -148,6 +148,207 @@ public class MongoDbDependencyInjectionTests
         await manager.SendAllAsync("Hello", ["World"]);
 
         Assert.StartsWith("app:Microsoft.AspNetCore.SignalR.Hub:", Assert.Single(backplane.Published).Channel);
+    }
+
+    [Fact]
+    public void ServiceProviderConfigureCallbackAppliesOptions()
+    {
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb((_, options) =>
+            {
+                options.UseConnectionString("mongodb://localhost:27017", "app_sp");
+            })
+            .Services
+            .BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
+
+        Assert.Equal("mongodb://localhost:27017", options.ConnectionString);
+        Assert.Equal("app_sp", options.DatabaseName);
+    }
+
+    [Fact]
+    public void ServiceProviderConfigureCallbackReceivesServiceProvider()
+    {
+        IServiceProvider? capturedSp = null;
+
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb((sp, options) =>
+            {
+                capturedSp = sp;
+                options.UseConnectionString("mongodb://localhost:27017", "app");
+            })
+            .Services
+            .BuildServiceProvider();
+
+        _ = provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
+
+        Assert.NotNull(capturedSp);
+    }
+
+    [Fact]
+    public void ConnectionStringAndServiceProviderConfigureAppliesCallback()
+    {
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb("mongodb://localhost:27017/app", (_, options) =>
+            {
+                options.CollectionName = "sp_messages";
+            })
+            .Services
+            .BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
+
+        Assert.Equal("app", options.DatabaseName);
+        Assert.Equal("sp_messages", options.CollectionName);
+    }
+
+    [Fact]
+    public void MongoDatabaseFactoryOverloadUsesFactory()
+    {
+        var fakeDatabase = new MongoClient("mongodb://localhost:27017").GetDatabase("app");
+        var factoryCalled = false;
+
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb(options => options.UseMongoDatabase(_ =>
+            {
+                factoryCalled = true;
+                return fakeDatabase;
+            }))
+            .Services
+            .BuildServiceProvider();
+
+        var resolvedDb = provider.GetRequiredService<IMongoDatabase>();
+
+        Assert.True(factoryCalled);
+        Assert.Same(fakeDatabase, resolvedDb);
+    }
+
+    [Fact]
+    public void MongoDatabaseFactorySkipsConnectionStringValidation()
+    {
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb(options =>
+                options.UseMongoDatabase(_ => new MongoClient("mongodb://localhost:27017").GetDatabase("app")))
+            .Services
+            .BuildServiceProvider();
+
+        var exception = Record.Exception(
+            () => provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void MongoDatabaseFactorySkipsDatabaseNameValidation()
+    {
+        // UseMongoDatabase bypasses DatabaseName validation; leaving DatabaseName null is fine.
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb(options =>
+                options.UseMongoDatabase(_ => new MongoClient("mongodb://localhost:27017").GetDatabase("app")))
+            .Services
+            .BuildServiceProvider();
+
+        var exception = Record.Exception(
+            () => provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value);
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void MongoDatabaseFactoryWithConfigureOverloadAppliesBoth()
+    {
+        var fakeDatabase = new MongoClient("mongodb://localhost:27017").GetDatabase("app");
+
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb(options =>
+            {
+                options.UseMongoDatabase(_ => fakeDatabase);
+                options.CollectionName = "custom_col";
+            })
+            .Services
+            .BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
+        var resolvedDb = provider.GetRequiredService<IMongoDatabase>();
+
+        Assert.Equal("custom_col", options.CollectionName);
+        Assert.Same(fakeDatabase, resolvedDb);
+    }
+
+    [Fact]
+    public void MongoDatabaseFactoryWithServiceProviderConfigureAppliesBoth()
+    {
+        var fakeDatabase = new MongoClient("mongodb://localhost:27017").GetDatabase("app");
+        IServiceProvider? capturedSp = null;
+
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb((sp, options) =>
+            {
+                capturedSp = sp;
+                options.UseMongoDatabase(_ => fakeDatabase);
+                options.CollectionName = "sp_col";
+            })
+            .Services
+            .BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
+        var resolvedDb = provider.GetRequiredService<IMongoDatabase>();
+
+        Assert.Equal("sp_col", options.CollectionName);
+        Assert.Same(fakeDatabase, resolvedDb);
+        Assert.NotNull(capturedSp);
+    }
+
+    [Fact]
+    public void InvalidOptionsWithoutMongoDatabaseFactoryStillFailValidation()
+    {
+        // UseConnectionString("mongodb://localhost:27017") has no DB in URL → DatabaseName stays null.
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb(options => options.UseConnectionString("mongodb://localhost:27017"))
+            .Services
+            .BuildServiceProvider();
+
+        var exception = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value);
+
+        Assert.Contains("DatabaseName must be configured.", exception.Failures);
+    }
+
+    [Fact]
+    public void MissingConnectionStringAndFactoryFailsValidation()
+    {
+        using var provider = new ServiceCollection()
+            .AddLogging()
+            .AddSignalR()
+            .AddMongoDb(static _ => { })
+            .Services
+            .BuildServiceProvider();
+
+        var exception = Assert.Throws<OptionsValidationException>(
+            () => provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value);
+
+        Assert.Contains(
+            "Either ConnectionString, MongoClientFactory, or MongoDatabaseFactory must be configured.",
+            exception.Failures);
     }
 
     private static IServiceCollection CreateServices(Action<MongoDbSignalROptions> configure)

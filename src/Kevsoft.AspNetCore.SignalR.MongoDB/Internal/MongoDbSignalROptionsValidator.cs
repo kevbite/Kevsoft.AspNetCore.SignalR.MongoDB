@@ -14,26 +14,29 @@ internal sealed class MongoDbSignalROptionsValidator : IValidateOptions<MongoDbS
 
         var failures = new List<string>();
 
-        if (options.MongoClientFactory == null && string.IsNullOrWhiteSpace(options.ConnectionString))
+        if (options.MongoDatabaseFactory == null)
         {
-            failures.Add("Either ConnectionString or MongoClientFactory must be configured.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(options.ConnectionString))
-        {
-            try
+            if (options.MongoClientFactory == null && string.IsNullOrWhiteSpace(options.ConnectionString))
             {
-                _ = MongoUrl.Create(options.ConnectionString);
+                failures.Add("Either ConnectionString, MongoClientFactory, or MongoDatabaseFactory must be configured.");
             }
-            catch (Exception ex)
-            {
-                failures.Add($"ConnectionString is not a valid MongoDB connection string: {ex.Message}");
-            }
-        }
 
-        if (string.IsNullOrWhiteSpace(options.DatabaseName))
-        {
-            failures.Add("DatabaseName must be configured.");
+            if (!string.IsNullOrWhiteSpace(options.ConnectionString))
+            {
+                try
+                {
+                    _ = MongoUrl.Create(options.ConnectionString);
+                }
+                catch (Exception ex)
+                {
+                    failures.Add($"ConnectionString is not a valid MongoDB connection string: {ex.Message}");
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(options.DatabaseName))
+            {
+                failures.Add("DatabaseName must be configured.");
+            }
         }
 
         if (string.IsNullOrWhiteSpace(options.CollectionName))

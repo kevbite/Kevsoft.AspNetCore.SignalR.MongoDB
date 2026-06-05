@@ -86,17 +86,24 @@ public class MongoDbRealTransportTests
 
     private static MongoDbSignalROptions CreateOptions(MongoDbSignalRTransportMode transportMode)
     {
-        return new MongoDbSignalROptions
+        var options = new MongoDbSignalROptions
         {
             CollectionName = "messages_" + Guid.NewGuid().ToString("N"),
             ChannelPrefix = "test-hub",
-            TransportMode = transportMode,
             AckTimeout = TimeSpan.FromSeconds(10),
-            TailableAwaitMaxAwaitTime = TimeSpan.FromMilliseconds(100),
-            TailableCollectionSizeBytes = 1024 * 1024,
             ConnectionPresenceTtl = TimeSpan.FromMinutes(1),
-            MessageTtl = TimeSpan.FromMinutes(5)
         };
+
+        if (transportMode == MongoDbSignalRTransportMode.TailableAwait)
+            options.UseTailableAwait(o =>
+            {
+                o.MaxAwaitTime = TimeSpan.FromMilliseconds(100);
+                o.CollectionSizeBytes = 1024 * 1024;
+            });
+        else
+            options.UseChangeStreams(o => o.MessageTtl = TimeSpan.FromMinutes(5));
+
+        return options;
     }
 
     private static MongoDbHubLifetimeManager<Hub> CreateManager(

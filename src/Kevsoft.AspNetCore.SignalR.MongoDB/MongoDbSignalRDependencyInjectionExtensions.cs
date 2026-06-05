@@ -69,8 +69,60 @@ public static class MongoDbSignalRDependencyInjectionExtensions
 
         return AddMongoDb(signalrBuilder, options =>
         {
-            ApplyConnectionString(options, connectionString);
+            options.UseConnectionString(connectionString);
             configure(options);
+        });
+    }
+
+    /// <summary>
+    /// Adds MongoDB scale-out to a SignalR server.
+    /// </summary>
+    /// <param name="signalrBuilder">The SignalR server builder.</param>
+    /// <param name="configure">
+    /// A callback used to configure MongoDB scale-out options. The <see cref="IServiceProvider"/>
+    /// passed to the callback is the root (singleton-scope) service provider; do not resolve
+    /// scoped services from it.
+    /// </param>
+    /// <returns>The same <see cref="ISignalRServerBuilder"/> instance for chaining.</returns>
+    public static ISignalRServerBuilder AddMongoDb(
+        this ISignalRServerBuilder signalrBuilder,
+        Action<IServiceProvider, MongoDbSignalROptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(signalrBuilder);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        signalrBuilder.Services.AddSingleton<IConfigureOptions<MongoDbSignalROptions>>(sp =>
+            new ConfigureNamedOptions<MongoDbSignalROptions>(
+                Microsoft.Extensions.Options.Options.DefaultName,
+                opts => configure(sp, opts)));
+        AddMongoDbServices(signalrBuilder.Services);
+
+        return signalrBuilder;
+    }
+
+    /// <summary>
+    /// Adds MongoDB scale-out to a SignalR server.
+    /// </summary>
+    /// <param name="signalrBuilder">The SignalR server builder.</param>
+    /// <param name="connectionString">The MongoDB connection string.</param>
+    /// <param name="configure">
+    /// A callback used to configure MongoDB scale-out options. The <see cref="IServiceProvider"/>
+    /// passed to the callback is the root (singleton-scope) service provider; do not resolve
+    /// scoped services from it.
+    /// </param>
+    /// <returns>The same <see cref="ISignalRServerBuilder"/> instance for chaining.</returns>
+    public static ISignalRServerBuilder AddMongoDb(
+        this ISignalRServerBuilder signalrBuilder,
+        string connectionString,
+        Action<IServiceProvider, MongoDbSignalROptions> configure)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        return AddMongoDb(signalrBuilder, (sp, options) =>
+        {
+            options.UseConnectionString(connectionString);
+            configure(sp, options);
         });
     }
 
@@ -82,6 +134,11 @@ public static class MongoDbSignalRDependencyInjectionExtensions
         services.TryAddSingleton(static serviceProvider =>
         {
             var options = serviceProvider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
+            if (options.MongoDatabaseFactory is not null)
+            {
+                return options.MongoDatabaseFactory(serviceProvider);
+            }
+
             var clientFactory = serviceProvider.GetRequiredService<IMongoDbSignalRClientFactory>();
             return clientFactory.CreateClient().GetDatabase(options.DatabaseName);
         });
@@ -99,21 +156,5 @@ public static class MongoDbSignalRDependencyInjectionExtensions
             options.CheckpointStore ??= checkpointStore;
         });
         optionsBuilder.ValidateOnStart();
-    }
-
-    private static void ApplyConnectionString(MongoDbSignalROptions options, string connectionString)
-    {
-        options.ConnectionString = connectionString;
-
-        if (!string.IsNullOrWhiteSpace(options.DatabaseName))
-        {
-            return;
-        }
-
-        var mongoUrl = MongoUrl.Create(connectionString);
-        if (!string.IsNullOrWhiteSpace(mongoUrl.DatabaseName))
-        {
-            options.DatabaseName = mongoUrl.DatabaseName;
-        }
     }
 }
