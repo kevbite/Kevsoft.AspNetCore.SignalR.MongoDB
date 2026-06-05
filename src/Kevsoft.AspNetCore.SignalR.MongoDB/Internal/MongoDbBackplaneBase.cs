@@ -214,6 +214,7 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
     protected async ValueTask DispatchDocumentAsync(BsonDocument document, CancellationToken cancellationToken)
     {
         if (!document.TryGetValue(MongoBackplaneDocumentFields.StreamId, out var streamIdValue) ||
+            !streamIdValue.IsString ||
             !string.Equals(streamIdValue.AsString, StreamId, StringComparison.Ordinal) ||
             !document.Contains(MongoBackplaneDocumentFields.Version))
         {
@@ -394,8 +395,18 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
         }
 
         var connectionIds = _localConnections.Keys.ToArray();
+
+        // Collect the distinct server IDs recorded in this backplane instance.
+        // In practice every connection comes from the same server (the owning
+        // MongoDbHubLifetimeManager passes its fixed _serverName), so this is
+        // almost always a single-element set. Including the server identity in
+        // the filter prevents one server's shutdown from deleting another
+        // server's live presence records if connection IDs were ever to collide.
+        var serverIds = _localConnections.Values.ToHashSet(StringComparer.Ordinal);
+
         var filter = Builders<BsonDocument>.Filter.And(
             Builders<BsonDocument>.Filter.Eq(MongoBackplaneDocumentFields.StreamId, StreamId),
+            Builders<BsonDocument>.Filter.In(MongoBackplaneDocumentFields.ServerId, serverIds),
             Builders<BsonDocument>.Filter.In(MongoBackplaneDocumentFields.ConnectionId, connectionIds));
 
         return PresenceCollection.DeleteManyAsync(filter, cancellationToken);
