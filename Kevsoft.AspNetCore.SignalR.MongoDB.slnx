@@ -6,4 +6,7 @@
     <Project Path="tests/Kevsoft.AspNetCore.SignalR.MongoDB.Tests/Kevsoft.AspNetCore.SignalR.MongoDB.Tests.csproj" />
     <Project Path="tests/Kevsoft.AspNetCore.SignalR.MongoDB.IntegrationTests/Kevsoft.AspNetCore.SignalR.MongoDB.IntegrationTests.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/SignalRChat/SignalRChat.csproj" />
+  </Folder>
 </Solution>
