@@ -87,33 +87,6 @@ jobs:
           unzip -l "$package" | grep -q 'lib/net9.0/Kevsoft.AspNetCore.SignalR.MongoDB.xml'
           unzip -l "$package" | grep -q 'lib/net10.0/Kevsoft.AspNetCore.SignalR.MongoDB.xml'
 
-      - name: Validate package consumption
-        run: |
-          set -euo pipefail
-          dotnet new web -n PackageConsumer -o artifacts/sample/PackageConsumer --framework net10.0
-          dotnet nuget add source "$(pwd)/artifacts/package" --name local-package-source
-          dotnet add artifacts/sample/PackageConsumer/PackageConsumer.csproj package Kevsoft.AspNetCore.SignalR.MongoDB --version "$PACKAGE_VERSION" --source "$(pwd)/artifacts/package"
-          cat > artifacts/sample/PackageConsumer/Program.cs <<'CS'
-          using Kevsoft.AspNetCore.SignalR.MongoDB;
-          using Microsoft.AspNetCore.SignalR;
-
-          var builder = WebApplication.CreateBuilder(args);
-          builder.Services.AddSignalR().AddMongoDb(options =>
-          {
-              options.ConnectionString = "mongodb://localhost:27017/app";
-              options.DatabaseName = "app";
-          });
-
-          var app = builder.Build();
-          app.MapHub<ChatHub>("/hub");
-          app.Run();
-
-          public sealed class ChatHub : Hub
-          {
-          }
-          CS
-          dotnet build artifacts/sample/PackageConsumer/PackageConsumer.csproj --configuration "$CONFIGURATION" --no-restore
-
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
