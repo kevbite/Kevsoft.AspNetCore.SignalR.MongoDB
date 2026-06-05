@@ -492,13 +492,21 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                     return;
                 }
 
-                if (command.Action == GroupAction.Add)
+                switch (command.Action)
                 {
-                    await AddGroupAsyncCore(connection, command.GroupName);
-                }
-                else if (command.Action == GroupAction.Remove)
-                {
-                    await RemoveGroupAsyncCore(connection, command.GroupName);
+                    case GroupAction.Add:
+                        await AddGroupAsyncCore(connection, command.GroupName);
+                        break;
+                    case GroupAction.Remove:
+                        await RemoveGroupAsyncCore(connection, command.GroupName);
+                        break;
+                    default:
+                        _logger.LogWarning(
+                            "MongoDB SignalR received unknown group action {Action}; ignoring.",
+                            command.Action);
+                        // Do NOT publish an ack for an action we didn't handle — let the
+                        // caller's ack timeout fire so the problem is surfaced, not hidden.
+                        return;
                 }
 
                 await PublishAsync(
