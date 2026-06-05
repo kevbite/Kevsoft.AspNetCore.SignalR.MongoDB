@@ -33,7 +33,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
     private readonly MongoDbBackplaneProtocol _protocol = new();
     private readonly AckHandler _ackHandler;
     private readonly ClientResultsManager _clientResultsManager = new();
-    private readonly IHubProtocolResolver _hubProtocolResolver;
+    private readonly IReadOnlyDictionary<string, IHubProtocol> _hubProtocols;
     private volatile bool _backplaneStarted;
     private int _internalAckId;
 
@@ -65,7 +65,8 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
     {
         _logger = logger;
         _options = options.Value;
-        _hubProtocolResolver = hubProtocolResolver;
+        _hubProtocols = hubProtocolResolver.AllProtocols
+            .ToDictionary(p => p.Name, StringComparer.Ordinal);
         _backplane = backplane;
         _ackHandler = new AckHandler(_options.AckTimeout);
         var channelPrefix = string.IsNullOrEmpty(_options.ChannelPrefix)
@@ -638,10 +639,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
             try
             {
                 var completion = MongoDbBackplaneProtocol.ReadCompletion(envelope);
-                var protocol = _hubProtocolResolver.AllProtocols.FirstOrDefault(protocol =>
-                    string.Equals(protocol.Name, completion.ProtocolName, StringComparison.Ordinal));
-
-                if (protocol == null)
+                if (!_hubProtocols.TryGetValue(completion.ProtocolName, out var protocol))
                 {
                     _logger.LogError(
                         "Unable to process MongoDB SignalR client result because protocol '{Protocol}' is unavailable.",

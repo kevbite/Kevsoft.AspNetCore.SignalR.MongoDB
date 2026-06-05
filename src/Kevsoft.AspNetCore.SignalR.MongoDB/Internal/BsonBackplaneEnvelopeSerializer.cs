@@ -80,6 +80,11 @@ internal sealed class BsonBackplaneEnvelopeSerializer : IBackplaneEnvelopeSerial
 
     private BsonDocument SerializeInvocation(MongoInvocation invocation)
     {
+        // Each registered hub protocol produces its own wire encoding of the invocation.
+        // All protocols are serialised eagerly here so that every server in the cluster
+        // can dispatch the message to its own connections regardless of which protocol
+        // those connections negotiate. This is the same "serialise once, dispatch cheaply"
+        // trade-off used by the ASP.NET Core Redis backplane.
         var messages = new BsonDocument();
         foreach (var protocol in _hubProtocols)
         {
