@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Protocol;
@@ -538,13 +539,18 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                     var invocation = _protocol.ReadInvocation(envelope);
                     if (!string.IsNullOrEmpty(invocation.InvocationId))
                     {
-                        CancellationTokenRegistration? tokenRegistration = null;
+                        // Use a StrongBox so the closure always reads from the same heap location.
+                        // If ConnectionAborted is already cancelled when Register() is called, the
+                        // callback fires synchronously inside Register() before the assignment below
+                        // runs. In that case registrationBox.Value is still default, and Dispose()
+                        // on a default CancellationTokenRegistration is a no-op, preventing a leak.
+                        var registrationBox = new StrongBox<CancellationTokenRegistration>();
                         _clientResultsManager.AddForwardingInvocation(
                             connection.ConnectionId,
                             invocation.InvocationId,
                             async completionMessage =>
                             {
-                                tokenRegistration?.Dispose();
+                                registrationBox.Value.Dispose();
                                 var bufferWriter = new ArrayBufferWriter<byte>();
                                 connection.Protocol.WriteMessage(completionMessage, bufferWriter);
                                 await PublishAsync(
@@ -556,7 +562,7 @@ public class MongoDbHubLifetimeManager<THub> : HubLifetimeManager<THub>, IAsyncD
                                     CancellationToken.None);
                             });
 
-                        tokenRegistration = connection.ConnectionAborted.Register(static state =>
+                        registrationBox.Value = connection.ConnectionAborted.Register(static state =>
                         {
                             var tuple = ((MongoDbHubLifetimeManager<THub> Manager, string InvocationId))state!;
                             var invocationInfo = tuple.Manager._clientResultsManager.RemoveInvocation(tuple.InvocationId);
