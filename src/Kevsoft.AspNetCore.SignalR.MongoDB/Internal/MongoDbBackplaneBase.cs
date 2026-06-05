@@ -277,9 +277,9 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
             try
             {
                 await timer.WaitForNextTickAsync(cancellationToken);
-                foreach (var connection in _localConnections)
+                if (!_localConnections.IsEmpty)
                 {
-                    await UpsertPresenceAsync(connection.Key, connection.Value, cancellationToken);
+                    await BulkUpsertPresenceAsync(cancellationToken);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -339,9 +339,36 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
         }
     }
 
+    private Task BulkUpsertPresenceAsync(CancellationToken cancellationToken)
+    {
+        var expiresAt = DateTime.UtcNow.Add(Options.ConnectionPresenceTtl);
+        var writes = new List<WriteModel<BsonDocument>>(_localConnections.Count);
+
+        foreach (var (connectionId, serverId) in _localConnections)
+        {
+            writes.Add(BuildUpsertPresenceModel(connectionId, serverId, expiresAt));
+        }
+
+        if (writes.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        return PresenceCollection.BulkWriteAsync(
+            writes,
+            new BulkWriteOptions { IsOrdered = false },
+            cancellationToken);
+    }
+
     private Task UpsertPresenceAsync(string connectionId, string serverId, CancellationToken cancellationToken)
     {
         var expiresAt = DateTime.UtcNow.Add(Options.ConnectionPresenceTtl);
+        var model = BuildUpsertPresenceModel(connectionId, serverId, expiresAt);
+        return PresenceCollection.UpdateOneAsync(model.Filter, model.Update, new UpdateOptions { IsUpsert = true }, cancellationToken);
+    }
+
+    private UpdateOneModel<BsonDocument> BuildUpsertPresenceModel(string connectionId, string serverId, DateTime expiresAt)
+    {
         var filter = Builders<BsonDocument>.Filter.And(
             Builders<BsonDocument>.Filter.Eq(MongoBackplaneDocumentFields.StreamId, StreamId),
             Builders<BsonDocument>.Filter.Eq(MongoBackplaneDocumentFields.ConnectionId, connectionId),
@@ -352,19 +379,22 @@ internal abstract class MongoDbBackplaneBase : IMongoSignalRBackplane, IMongoDbS
             .Set(MongoBackplaneDocumentFields.ServerId, serverId)
             .Set(MongoBackplaneDocumentFields.ExpiresAtUtc, expiresAt);
 
-        return PresenceCollection.UpdateOneAsync(
-            filter,
-            update,
-            new UpdateOptions { IsUpsert = true },
-            cancellationToken);
+        return new UpdateOneModel<BsonDocument>(filter, update) { IsUpsert = true };
     }
 
-    private async Task RemoveLocalPresenceAsync(CancellationToken cancellationToken)
+    private Task RemoveLocalPresenceAsync(CancellationToken cancellationToken)
     {
-        foreach (var connection in _localConnections)
+        if (_localConnections.IsEmpty)
         {
-            await RemoveConnectionAsync(connection.Key, connection.Value, cancellationToken);
+            return Task.CompletedTask;
         }
+
+        var connectionIds = _localConnections.Keys.ToArray();
+        var filter = Builders<BsonDocument>.Filter.And(
+            Builders<BsonDocument>.Filter.Eq(MongoBackplaneDocumentFields.StreamId, StreamId),
+            Builders<BsonDocument>.Filter.In(MongoBackplaneDocumentFields.ConnectionId, connectionIds));
+
+        return PresenceCollection.DeleteManyAsync(filter, cancellationToken);
     }
 
     private void EnsureStarted()
