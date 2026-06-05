@@ -26,20 +26,41 @@ internal sealed class MongoBackplaneSubscriptionRegistry
             return 0;
         }
 
-        Subscription[] snapshot;
+        Func<MongoBackplaneEnvelope, CancellationToken, ValueTask>? singleHandler = null;
+        Subscription[]? multiSnapshot = null;
+
         lock (subscriptions)
         {
-            snapshot = subscriptions.ToArray();
+            switch (subscriptions.Count)
+            {
+                case 0:
+                    return 0;
+                case 1:
+                    // Capture the handler reference to avoid a Subscription[] allocation for
+                    // the common case where a channel has exactly one subscriber (per-connection,
+                    // per-user, and per-group channels almost always have a single subscriber).
+                    singleHandler = subscriptions[0].Handler;
+                    break;
+                default:
+                    multiSnapshot = subscriptions.ToArray();
+                    break;
+            }
         }
 
-        var tasks = new Task[snapshot.Length];
-        for (var i = 0; i < snapshot.Length; i++)
+        if (singleHandler != null)
         {
-            tasks[i] = snapshot[i].Handler(envelope, cancellationToken).AsTask();
+            await singleHandler(envelope, cancellationToken);
+            return 1;
+        }
+
+        var tasks = new Task[multiSnapshot!.Length];
+        for (var i = 0; i < multiSnapshot.Length; i++)
+        {
+            tasks[i] = multiSnapshot[i].Handler(envelope, cancellationToken).AsTask();
         }
 
         await Task.WhenAll(tasks);
-        return snapshot.Length;
+        return multiSnapshot.Length;
     }
 
     public void Clear()
