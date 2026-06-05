@@ -117,8 +117,15 @@ internal sealed class MongoDbChangeStreamBackplane : MongoDbBackplaneBase
 
     private static bool IsInvalidResumeToken(MongoCommandException ex)
     {
-        return ex.Code == 286 ||
-            string.Equals(ex.CodeName, "ChangeStreamHistoryLost", StringComparison.Ordinal) ||
-            ex.Message.Contains("resume token", StringComparison.OrdinalIgnoreCase);
+        // Three MongoDB error codes indicate the change stream cannot be resumed with
+        // the current token and must be restarted from the current live position:
+        //   260 = InvalidResumeToken    – the token is structurally malformed or invalid
+        //   280 = ChangeStreamFatalError – a non-resumable fatal stream condition
+        //   286 = ChangeStreamHistoryLost – the oplog has been rolled past the resume point
+        // Both code number and code name are checked for defensive coverage.
+        return ex.Code is 260 or 280 or 286 ||
+            string.Equals(ex.CodeName, "InvalidResumeToken", StringComparison.Ordinal) ||
+            string.Equals(ex.CodeName, "ChangeStreamFatalError", StringComparison.Ordinal) ||
+            string.Equals(ex.CodeName, "ChangeStreamHistoryLost", StringComparison.Ordinal);
     }
 }
