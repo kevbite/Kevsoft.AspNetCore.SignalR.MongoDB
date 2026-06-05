@@ -1,6 +1,7 @@
 using System.Buffers;
 using Kevsoft.AspNetCore.SignalR.MongoDB.Internal;
 using Microsoft.AspNetCore.SignalR.Protocol;
+using MongoDB.Bson;
 
 namespace Kevsoft.AspNetCore.SignalR.MongoDB.Tests;
 
@@ -75,6 +76,66 @@ public class BsonBackplaneEnvelopeSerializerTests
 
         Assert.Equal("json", completion.ProtocolName);
         Assert.Equal(payload, completion.CompletionMessage);
+    }
+
+    [Fact]
+    public void DeserializeThrowsForUnsupportedVersion()
+    {
+        var serializer = CreateSerializer();
+        var envelope = CreateSerializer().Serialize(
+            new MongoDbBackplaneProtocol().WriteInvocation("ch", "M", []));
+        envelope["version"] = 999;
+
+        Assert.Throws<InvalidDataException>(() => serializer.Deserialize(envelope));
+    }
+
+    [Fact]
+    public void DeserializeThrowsForUnknownPayloadDiscriminator()
+    {
+        var serializer = CreateSerializer();
+        var envelope = CreateSerializer().Serialize(
+            new MongoDbBackplaneProtocol().WriteInvocation("ch", "M", []));
+        // Replace the _t discriminator inside the payload subdocument.
+        envelope["payload"].AsBsonDocument["_t"] = "unknown_type";
+
+        Assert.Throws<InvalidDataException>(() => serializer.Deserialize(envelope));
+    }
+
+    [Fact]
+    public void DeserializeThrowsForMissingVersionField()
+    {
+        var serializer = CreateSerializer();
+        var envelope = CreateSerializer().Serialize(
+            new MongoDbBackplaneProtocol().WriteInvocation("ch", "M", []));
+        envelope.Remove("version");
+
+        // GetValue("version") throws when the field is absent.
+        Assert.ThrowsAny<Exception>(() => serializer.Deserialize(envelope));
+    }
+
+    [Fact]
+    public void DeserializeThrowsForMissingChannelField()
+    {
+        var serializer = CreateSerializer();
+        var envelope = CreateSerializer().Serialize(
+            new MongoDbBackplaneProtocol().WriteInvocation("ch", "M", []));
+        envelope.Remove("channel");
+
+        Assert.ThrowsAny<Exception>(() => serializer.Deserialize(envelope));
+    }
+
+    [Fact]
+    public void DeserializeDocumentWithExtraFieldsSucceeds()
+    {
+        var serializer = CreateSerializer();
+        var base_ = serializer.Serialize(
+            new MongoDbBackplaneProtocol().WriteInvocation("ch", "M", []));
+        base_["unknownFutureField"] = "value";
+
+        // Forward-compatible: extra top-level fields must not cause a failure.
+        var result = serializer.Deserialize(base_);
+
+        Assert.Equal("ch", result.Channel);
     }
 
     private BsonBackplaneEnvelopeSerializer CreateSerializer()

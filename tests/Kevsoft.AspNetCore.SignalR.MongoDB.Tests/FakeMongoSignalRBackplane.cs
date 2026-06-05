@@ -14,6 +14,12 @@ internal sealed class FakeMongoSignalRBackplane : IMongoSignalRBackplane
 
     public List<MongoBackplaneEnvelope> Published { get; } = [];
 
+    /// <summary>Returns the set of channels that currently have at least one subscriber.</summary>
+    public IReadOnlyCollection<string> SubscriptionChannels => _subscriptions
+        .Where(kv => { lock (kv.Value) { return kv.Value.Count > 0; } })
+        .Select(kv => kv.Key)
+        .ToArray();
+
     public ValueTask StartAsync(string streamId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(streamId);
