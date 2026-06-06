@@ -63,10 +63,9 @@ internal sealed class MongoDbChangeStreamBackplane : MongoDbBackplaneBase
                 // Only watch Insert operations and filter by streamId to avoid pulling
                 // documents for other applications or hubs sharing the same collection.
                 var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
-                    .Match(change =>
-                        change.OperationType == ChangeStreamOperationType.Insert &&
-                        change.FullDocument != null &&
-                        change.FullDocument[MongoBackplaneDocumentFields.StreamId] == StreamId);
+                    .Match(Builders<ChangeStreamDocument<BsonDocument>>.Filter.And(
+                        Builders<ChangeStreamDocument<BsonDocument>>.Filter.Eq(x => x.OperationType, ChangeStreamOperationType.Insert),
+                        Builders<ChangeStreamDocument<BsonDocument>>.Filter.Eq($"fullDocument.{MongoBackplaneDocumentFields.StreamId}", StreamId)));
 
                 var options = new ChangeStreamOptions
                 {
