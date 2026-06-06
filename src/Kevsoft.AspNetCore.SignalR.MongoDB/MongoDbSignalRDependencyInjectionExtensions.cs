@@ -3,7 +3,6 @@ using Kevsoft.AspNetCore.SignalR.MongoDB.Internal;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
-using MongoDB.Driver;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
@@ -130,18 +129,6 @@ public static class MongoDbSignalRDependencyInjectionExtensions
     {
         services.TryAddSingleton<IMessageCheckpointStore, InMemoryMessageCheckpointStore>();
         services.TryAddSingleton<IBackplaneEnvelopeSerializer, BsonBackplaneEnvelopeSerializer>();
-        services.TryAddSingleton<IMongoDbSignalRClientFactory, DefaultMongoDbSignalRClientFactory>();
-        services.TryAddSingleton(static serviceProvider =>
-        {
-            var options = serviceProvider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
-            if (options.MongoDatabaseFactory is not null)
-            {
-                return options.MongoDatabaseFactory(serviceProvider);
-            }
-
-            var clientFactory = serviceProvider.GetRequiredService<IMongoDbSignalRClientFactory>();
-            return clientFactory.CreateClient().GetDatabase(options.DatabaseName);
-        });
 
         services.AddTransient(MongoDbSignalRServiceFactory.CreateBackplane);
         services.AddTransient(static serviceProvider =>

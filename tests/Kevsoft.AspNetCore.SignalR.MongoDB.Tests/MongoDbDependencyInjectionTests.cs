@@ -61,18 +61,22 @@ public class MongoDbDependencyInjectionTests
     public void ConfigureOverloadUsesCustomMongoClientFactory()
     {
         var factoryCalled = false;
+        IMongoClient? capturedClient = null;
         using var provider = CreateServices(options =>
         {
             options.UseMongoClient(_ =>
             {
                 factoryCalled = true;
-                return new MongoClient("mongodb://localhost:27017");
+                capturedClient = new MongoClient("mongodb://localhost:27017");
+                return capturedClient;
             }, "app");
         }).BuildServiceProvider();
 
-        _ = provider.GetRequiredService<IMongoDatabase>();
+        // Resolve the backplane to trigger client creation
+        _ = provider.GetRequiredService<IMongoSignalRBackplane>();
 
         Assert.True(factoryCalled);
+        Assert.NotNull(capturedClient);
     }
 
     [Theory]
@@ -226,10 +230,10 @@ public class MongoDbDependencyInjectionTests
             .Services
             .BuildServiceProvider();
 
-        var resolvedDb = provider.GetRequiredService<IMongoDatabase>();
+        // Resolve the backplane to trigger database factory
+        _ = provider.GetRequiredService<IMongoSignalRBackplane>();
 
         Assert.True(factoryCalled);
-        Assert.Same(fakeDatabase, resolvedDb);
     }
 
     [Fact]
@@ -271,23 +275,29 @@ public class MongoDbDependencyInjectionTests
     public void MongoDatabaseFactoryWithConfigureOverloadAppliesBoth()
     {
         var fakeDatabase = new MongoClient("mongodb://localhost:27017").GetDatabase("app");
+        var factoryCalled = false;
 
         using var provider = new ServiceCollection()
             .AddLogging()
             .AddSignalR()
             .AddMongoDb(options =>
             {
-                options.UseMongoDatabase(_ => fakeDatabase);
+                options.UseMongoDatabase(_ =>
+                {
+                    factoryCalled = true;
+                    return fakeDatabase;
+                });
                 options.CollectionName = "custom_col";
             })
             .Services
             .BuildServiceProvider();
 
         var options = provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
-        var resolvedDb = provider.GetRequiredService<IMongoDatabase>();
+        // Resolve the backplane to trigger database factory
+        _ = provider.GetRequiredService<IMongoSignalRBackplane>();
 
         Assert.Equal("custom_col", options.CollectionName);
-        Assert.Same(fakeDatabase, resolvedDb);
+        Assert.True(factoryCalled);
     }
 
     [Fact]
@@ -295,6 +305,7 @@ public class MongoDbDependencyInjectionTests
     {
         var fakeDatabase = new MongoClient("mongodb://localhost:27017").GetDatabase("app");
         IServiceProvider? capturedSp = null;
+        var factoryCalled = false;
 
         using var provider = new ServiceCollection()
             .AddLogging()
@@ -302,17 +313,22 @@ public class MongoDbDependencyInjectionTests
             .AddMongoDb((sp, options) =>
             {
                 capturedSp = sp;
-                options.UseMongoDatabase(_ => fakeDatabase);
+                options.UseMongoDatabase(_ =>
+                {
+                    factoryCalled = true;
+                    return fakeDatabase;
+                });
                 options.CollectionName = "sp_col";
             })
             .Services
             .BuildServiceProvider();
 
         var options = provider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
-        var resolvedDb = provider.GetRequiredService<IMongoDatabase>();
+        // Resolve the backplane to trigger database factory
+        _ = provider.GetRequiredService<IMongoSignalRBackplane>();
 
         Assert.Equal("sp_col", options.CollectionName);
-        Assert.Same(fakeDatabase, resolvedDb);
+        Assert.True(factoryCalled);
         Assert.NotNull(capturedSp);
     }
 

@@ -10,7 +10,7 @@ internal static class MongoDbSignalRServiceFactory
     public static IMongoSignalRBackplane CreateBackplane(IServiceProvider serviceProvider)
     {
         var options = serviceProvider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
-        var database = serviceProvider.GetRequiredService<IMongoDatabase>();
+        var database = MongoDbSignalRDatabaseFactory.CreateDatabase(serviceProvider, options);
         var serializer = serviceProvider.GetRequiredService<IBackplaneEnvelopeSerializer>();
         var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
 
