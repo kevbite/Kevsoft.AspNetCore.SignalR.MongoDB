@@ -59,23 +59,27 @@ internal sealed class MongoDbChangeStreamBackplane : MongoDbBackplaneBase
         {
             try
             {
+                // Build a pipeline to filter server-side, reducing network overhead.
+                // Only watch Insert operations and filter by streamId to avoid pulling
+                // documents for other applications or hubs sharing the same collection.
+                var pipeline = new EmptyPipelineDefinition<ChangeStreamDocument<BsonDocument>>()
+                    .Match(Builders<ChangeStreamDocument<BsonDocument>>.Filter.And(
+                        Builders<ChangeStreamDocument<BsonDocument>>.Filter.Eq(x => x.OperationType, ChangeStreamOperationType.Insert),
+                        Builders<ChangeStreamDocument<BsonDocument>>.Filter.Eq($"fullDocument.{MongoBackplaneDocumentFields.StreamId}", StreamId)));
+
                 var options = new ChangeStreamOptions
                 {
                     ResumeAfter = _resumeToken
                 };
 
-                using var cursor = await Collection.WatchAsync(options, cancellationToken);
+                using var cursor = await Collection.WatchAsync(pipeline, options, cancellationToken);
                 readerReady.TrySetResult();
                 while (!cancellationToken.IsCancellationRequested && await cursor.MoveNextAsync(cancellationToken))
                 {
                     foreach (var change in cursor.Current)
                     {
-                        if (change.OperationType != ChangeStreamOperationType.Insert || change.FullDocument == null)
-                        {
-                            continue;
-                        }
-
-                        await DispatchDocumentAsync(change.FullDocument, cancellationToken);
+                        // The pipeline guarantees FullDocument is non-null for Insert operations.
+                        await DispatchDocumentAsync(change.FullDocument!, cancellationToken);
 
                         if (change.ResumeToken != null)
                         {
