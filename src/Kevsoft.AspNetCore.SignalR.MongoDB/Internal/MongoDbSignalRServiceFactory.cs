@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Kevsoft.AspNetCore.SignalR.MongoDB.Internal;
@@ -9,19 +10,23 @@ internal static class MongoDbSignalRServiceFactory
     {
         var options = serviceProvider.GetRequiredService<IOptions<MongoDbSignalROptions>>().Value;
         var database = MongoDbSignalRDatabaseFactory.CreateDatabase(serviceProvider, options);
+        var serializer = serviceProvider.GetRequiredService<IBackplaneEnvelopeSerializer>();
+        var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
 
         return options.TransportMode switch
         {
             MongoDbSignalRTransportMode.ChangeStreams => 
-                ActivatorUtilities.CreateInstance<MongoDbChangeStreamBackplane>(
-                    serviceProvider,
+                new MongoDbChangeStreamBackplane(
                     database,
-                    options),
+                    options,
+                    serializer,
+                    loggerFactory.CreateLogger<MongoDbChangeStreamBackplane>()),
             MongoDbSignalRTransportMode.TailableAwait => 
-                ActivatorUtilities.CreateInstance<MongoDbTailableAwaitBackplane>(
-                    serviceProvider,
+                new MongoDbTailableAwaitBackplane(
                     database,
-                    options),
+                    options,
+                    serializer,
+                    loggerFactory.CreateLogger<MongoDbTailableAwaitBackplane>()),
             _ => throw new OptionsValidationException(
                 Options.DefaultName,
                 typeof(MongoDbSignalROptions),

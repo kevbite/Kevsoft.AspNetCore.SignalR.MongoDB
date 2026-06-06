@@ -58,11 +58,11 @@ public class MongoDbDependencyInjectionTests
     }
 
     [Fact]
-    public void ConfigureOverloadUsesCustomMongoClientFactory()
+    public async Task ConfigureOverloadUsesCustomMongoClientFactory()
     {
         var factoryCalled = false;
         IMongoClient? capturedClient = null;
-        using var provider = CreateServices(options =>
+        await using var provider = CreateServices(options =>
         {
             options.UseMongoClient(_ =>
             {
@@ -214,12 +214,12 @@ public class MongoDbDependencyInjectionTests
     }
 
     [Fact]
-    public void MongoDatabaseFactoryOverloadUsesFactory()
+    public async Task MongoDatabaseFactoryOverloadUsesFactory()
     {
         var fakeDatabase = new MongoClient("mongodb://localhost:27017").GetDatabase("app");
         var factoryCalled = false;
 
-        using var provider = new ServiceCollection()
+        await using var provider = new ServiceCollection()
             .AddLogging()
             .AddSignalR()
             .AddMongoDb(options => options.UseMongoDatabase(_ =>
@@ -272,12 +272,12 @@ public class MongoDbDependencyInjectionTests
     }
 
     [Fact]
-    public void MongoDatabaseFactoryWithConfigureOverloadAppliesBoth()
+    public async Task MongoDatabaseFactoryWithConfigureOverloadAppliesBoth()
     {
         var fakeDatabase = new MongoClient("mongodb://localhost:27017").GetDatabase("app");
         var factoryCalled = false;
 
-        using var provider = new ServiceCollection()
+        await using var provider = new ServiceCollection()
             .AddLogging()
             .AddSignalR()
             .AddMongoDb(options =>
@@ -301,13 +301,13 @@ public class MongoDbDependencyInjectionTests
     }
 
     [Fact]
-    public void MongoDatabaseFactoryWithServiceProviderConfigureAppliesBoth()
+    public async Task MongoDatabaseFactoryWithServiceProviderConfigureAppliesBoth()
     {
         var fakeDatabase = new MongoClient("mongodb://localhost:27017").GetDatabase("app");
         IServiceProvider? capturedSp = null;
         var factoryCalled = false;
 
-        using var provider = new ServiceCollection()
+        await using var provider = new ServiceCollection()
             .AddLogging()
             .AddSignalR()
             .AddMongoDb((sp, options) =>
